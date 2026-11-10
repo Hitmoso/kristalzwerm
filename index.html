@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kristalzwerm</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div id="resources" class="panel">
+      <div class="res"><span class="gem"></span><b id="gold">300</b><small id="income">+5/s</small></div>
+      <div class="res"><span class="flag"></span><b id="supply">4/12</b><small id="queue"></small></div>
+      <button id="room" class="chip" hidden></button>
+      <div class="res" id="shieldRow" hidden><span class="shield"></span><b id="shield">1:30</b><small>schild — vervalt als je een kasteel aanvalt</small></div>
+    </div>
+
+    <ol id="board" class="panel"></ol>
+
+    <div id="feed"></div>
+    <div id="banner" hidden></div>
+
+    <div id="bottom">
+      <div id="tip" hidden></div>
+      <div id="actions">
+        <div class="group" id="buildGroup" data-label="Bouwen"></div>
+        <div class="group" id="trainGroup" data-label="Trainen"></div>
+        <div class="group side" data-label="Leger">
+          <button id="stance" class="wide"><kbd>Spatie</kbd><span>Leger volgt koning</span></button>
+          <button id="mute" class="wide"><kbd>M</kbd><span>Geluid aan</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="start" class="overlay">
+    <div class="card">
+      <h1>Kristal<em>zwerm</em></h1>
+      <p class="lead">Bouw een kasteel, verzamel een leger en veeg de andere koningen van de kaart.</p>
+      <ul class="keys">
+        <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span> of muis ingedrukt — je koning sturen</li>
+        <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span> bouwen vóór je koning</li>
+        <li><span><kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><kbd>F</kbd><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd></span> troepen trainen</li>
+        <li><span><kbd>Spatie</kbd></span> leger bij je kasteel laten of meenemen</li>
+      </ul>
+      <input id="name" maxlength="14" placeholder="Jouw naam" autocomplete="off" spellcheck="false">
+      <div class="roomrow">
+        <input id="roomCode" maxlength="8" placeholder="Kamercode (leeg = open wereld)" autocomplete="off" spellcheck="false">
+        <button id="newRoom" type="button" title="Maak een privékamer voor jou en je vrienden">Nieuwe kamer</button>
+      </div>
+      <button id="play" class="primary">Spelen</button>
+      <button id="practice" class="secondary">Alleen oefenen tegen bots</button>
+      <p id="status" class="status" hidden></p>
+      <p class="fine">Je leger volgt je en valt vanzelf aan. Verlies je kasteel, dan begin je opnieuw.</p>
+    </div>
+  </div>
+
+  <div id="dead" class="overlay" hidden>
+    <div class="card">
+      <h2>Je kasteel is gevallen</h2>
+      <p id="deadText" class="lead"></p>
+      <button id="again" class="primary">Opnieuw beginnen</button>
+    </div>
+  </div>
+
+  <script type="module" src="src/client/main.js"></script>
+</body>
+</html>

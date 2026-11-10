@@ -1,0 +1,182 @@
+// DOM HUD: resources, action buttons, scoreboard, messages, tips.
+
+import { UNITS, BUILDINGS, WORLD, playerStats, buildingCost } from '../sim/index.js';
+import { colorOf } from './render.js';
+import { iconUrl } from './sprites.js';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+
+const BUILD = [
+  ['mine', 'Mijn', '1', 'Digit1', '+2 goud per seconde'],
+  ['barracks', 'Kazerne', '2', 'Digit2', '+8 leger; schutters, ridders en reuzen'],
+  ['tower', 'Toren', '3', 'Digit3', 'Schiet op vijanden in de buurt'],
+  ['academy', 'Academie', '4', 'Digit4', '+4 leger; magiërs, genezers en draken'],
+];
+const TRAIN = [
+  ['soldier', 'Soldaat', 'Q', 'Goedkoop en stevig'],
+  ['archer', 'Schutter', 'E', 'Schiet van afstand'],
+  ['knight', 'Ridder', 'R', 'Snel; opent met een stormloop'],
+  ['giant', 'Reus', 'F', 'Traag en taai; sloopt gebouwen'],
+  ['mage', 'Magiër', 'Z', 'Vuurbal raakt een hele groep'],
+  ['healer', 'Genezer', 'X', 'Geneest gewonde troepen'],
+  ['dragon', 'Draak', 'C', 'Vliegt en spuwt vuur'],
+];
+const NEEDS = { barracks: 'Kazerne', academy: 'Academie' };
+const NOTICES = {
+  gold: 'Niet genoeg goud',
+  supply: 'Legerlimiet bereikt — bouw een Kazerne of Academie',
+  barracks: 'Bouw eerst een Kazerne',
+  academy: 'Bouw eerst een Academie',
+  blocked: 'Daar staat al een gebouw',
+  edge: 'Te dicht bij de rand',
+  enemy: 'Te dicht bij een vijandelijke basis',
+  commander: 'Je koning is onderweg terug',
+};
+
+export function createHud(onAction) {
+  const el = {
+    hud: $('hud'), gold: $('gold'), income: $('income'), supply: $('supply'), queue: $('queue'),
+    shieldRow: $('shieldRow'), shield: $('shield'),
+    board: $('board'), feed: $('feed'), banner: $('banner'), tip: $('tip'),
+    build: $('buildGroup'), train: $('trainGroup'),
+    stance: $('stance'), mute: $('mute'), room: $('room'),
+    buttons: [],
+  };
+  let lastNoticeAt = -1, lastNoticeCode = '', lastNoticeShown = -99;
+  let lastBoard = '';
+  const mine = colorOf(0);
+
+  const addButton = (group, cmd, [kind, name, key, , hint]) => {
+    const b = document.createElement('button');
+    b.dataset.cmd = cmd;
+    b.dataset.kind = kind;
+    b.title = `${name} — ${cmd === 'build' ? BUILD.find((x) => x[0] === kind)[4] : hint}`;
+    b.innerHTML = `<kbd>${key}</kbd><img alt="" src="${iconUrl(kind, mine)}"><span>${name}</span><i></i>`;
+    b.addEventListener('click', () => { onAction({ type: cmd, kind }); b.blur(); });
+    group.append(b);
+    el.buttons.push(b);
+  };
+  for (const row of BUILD) addButton(el.build, 'build', row);
+  for (const [kind, name, key, hint] of TRAIN) addButton(el.train, 'train', [kind, name, key, null, hint]);
+
+  const say = (text, warn) => {
+    const d = document.createElement('div');
+    d.textContent = text;
+    if (warn) d.className = 'warn';
+    el.feed.append(d);
+    while (el.feed.children.length > 4) el.feed.firstChild.remove();
+    setTimeout(() => d.remove(), 4600);
+  };
+
+  const flash = (cmd) => {
+    const b = el.buttons.find((x) => x.dataset.cmd === cmd.type && x.dataset.kind === cmd.kind);
+    if (!b) return;
+    b.classList.add('flash');
+    setTimeout(() => b.classList.remove('flash'), 90);
+  };
+
+  // Called ~10 times per second.
+  // `stats` comes from the server when playing online; offline we work it out here.
+  const update = (world, me, stats) => {
+    const st = stats || playerStats(world, me.id);
+    el.gold.textContent = Math.floor(me.gold);
+    const heart = world.shrine && world.shrine.owner === me.id ? WORLD.shrineIncome : 0;
+    el.income.textContent = heart ? `+${st.income + heart}/s met Kristalhart` : `+${st.income}/s`;
+    el.stance.classList.toggle('on', !!me.hold);
+    el.stance.querySelector('span').textContent = me.hold ? 'Leger bewaakt kasteel' : 'Leger volgt koning';
+    el.supply.textContent = `${st.supply}/${st.cap}`;
+    const training = me.queue.length + world.buildings.reduce((n, b) => n + (b.owner === me.id && b.train ? 1 : 0), 0);
+    el.queue.textContent = training ? `${training} in opleiding` : 'leger';
+
+    const shield = me.alive ? me.shieldUntil - world.time : 0;
+    el.shieldRow.hidden = shield <= 0;
+    if (shield > 0) el.shield.textContent = `${Math.floor(shield / 60)}:${String(Math.floor(shield % 60)).padStart(2, '0')}`;
+
+    for (const b of el.buttons) {
+      const kind = b.dataset.kind;
+      let cost, locked = '', full = false;
+      if (b.dataset.cmd === 'build') cost = buildingCost(kind, st);
+      else {
+        const def = UNITS[kind];
+        cost = def.cost;
+        if (def.needs && !st[def.needs]) locked = NEEDS[def.needs];
+        full = st.supply + def.supply > st.cap;
+      }
+      b.lastElementChild.textContent = locked || (full ? 'vol' : cost);
+      b.classList.toggle('off', !!locked || full || me.gold < cost);
+      b.classList.toggle('locked', !!locked);
+    }
+
+    // scoreboard
+    const rows = world.players.filter((p) => p && !p.left).sort((a, b) => b.score - a.score);
+    const html = rows.map((p) =>
+      `<li class="${p.id === me.id ? 'me' : ''}${p.alive ? '' : ' out'}"><i style="background:${colorOf(p.id).main}"></i><span>${p.id === me.id ? 'Jij' : esc(p.name)}</span><b>${Math.floor(p.score)}</b></li>`
+    ).join('');
+    if (html !== lastBoard) { el.board.innerHTML = html; lastBoard = html; }
+
+    // refused commands
+    if (me.notice && me.notice.at !== lastNoticeAt) {
+      // Holding a key repeats the command; say each reason at most once per 2 s.
+      const repeat = me.notice.code === lastNoticeCode && me.notice.at - lastNoticeShown < 2;
+      lastNoticeAt = me.notice.at;
+      if (!repeat) {
+        lastNoticeCode = me.notice.code;
+        lastNoticeShown = me.notice.at;
+        say(NOTICES[me.notice.code] || 'Dat kan nu niet', true);
+      }
+    }
+
+    // banner: base under attack / commander down
+    let banner = '';
+    if (me.alive && !me.commanderId) banner = `Je koning keert terug over ${Math.ceil(Math.max(0, me.commanderRespawn))} s`;
+    else if (me.alive && world.time - me.hqHitAt < 2.5) banner = 'Je kasteel wordt aangevallen!';
+    el.banner.hidden = !banner;
+    if (banner) el.banner.textContent = banner;
+
+    // contextual tip for the first minutes of a life
+    let tip = '';
+    const age = world.time - me.spawnedAt;
+    if (me.alive && age < 300 && me.score < 2500) {
+      if (st.barracks === 0) tip = me.gold >= BUILDINGS.barracks.cost ? 'Druk op 2 voor een Kazerne — groter leger en sterkere troepen' : 'Loop over de gouden kristallen om goud te verzamelen';
+      else if (st.army < 10) tip = 'Train troepen met Q, E, R en F — je leger volgt je en valt vanzelf aan';
+      else if (st.academy === 0) tip = me.gold >= BUILDINGS.academy.cost ? 'Druk op 4 voor een Academie — magiërs, genezers en draken' : 'Spaar voor een Academie (220 goud) of bouw nog een Mijn (1)';
+      else if (shield > 0) tip = 'Je kasteel is beschermd zolang het schild staat — bouw je leger op';
+      else if (age < 260) tip = 'Zoek een vijand op de kaart rechtsonder en sloop zijn kasteel';
+    }
+    el.tip.hidden = !tip;
+    if (tip) el.tip.textContent = tip;
+  };
+
+  // Announce what happened this tick.
+  const events = (world, me) => {
+    for (const e of world.events) {
+      if (e.type === 'cheat' && e.player === me.id) say(`Geheime schatkist geopend: +${e.gold} goud`);
+      if (e.type === 'captured') {
+        const who = e.player === me.id ? 'Jij hebt' : `${world.players[e.player] ? world.players[e.player].name : 'Iemand'} heeft`;
+        say(`${who} het Kristalhart veroverd (+${WORLD.shrineIncome} goud/s)`, e.player !== me.id);
+      }
+      if (e.type !== 'eliminated') continue;
+      const loser = e.player === me.id ? 'Jij bent' : `${world.players[e.player].name} is`;
+      const by = e.by === me.id ? 'jou' : e.by >= 0 ? world.players[e.by].name : 'onbekend';
+      say(`${loser} uitgeschakeld door ${by}${e.by === me.id ? ` (+${e.bounty} goud)` : ''}`, e.player === me.id);
+    }
+  };
+
+  el.stance.addEventListener('click', () => { onAction({ type: 'stance' }); el.stance.blur(); });
+  el.mute.addEventListener('click', () => { onAction({ type: 'mute' }); el.mute.blur(); });
+  const setMuted = (m) => { el.mute.querySelector('span').textContent = m ? 'Geluid uit' : 'Geluid aan'; el.mute.classList.toggle('on', m); };
+
+  // Private room: show the code; a click copies the invite link.
+  const setRoom = (code, link) => {
+    el.room.hidden = !code;
+    if (!code) return;
+    el.room.textContent = `Kamer ${code} — kopieer uitnodiging`;
+    el.room.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); say('Uitnodigingslink gekopieerd'); }
+      catch { say(link); }
+    };
+  };
+
+  return { update, events, say, flash, setMuted, setRoom, show: (v) => { el.hud.hidden = !v; } };
+}

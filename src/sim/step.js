@@ -1,0 +1,515 @@
+// One fixed simulation tick. Everything that changes the world happens here.
+
+import { DT, WORLD, UNITS, BUILDINGS } from './config.js';
+import { buildGrid, queryGrid } from './grid.js';
+import {
+  playerStats, buildingCost, resetPlayer, spawnUnit, spawnBuilding, spawnCrystal, pushOutOfBuildings,
+} from './world.js';
+import { updateBot } from './bot.js';
+
+const GRID_CELL = 120;
+const FOLLOW_SPEED = 215;
+const BUILD_KINDS = { mine: 1, barracks: 1, tower: 1, academy: 1 };
+
+export function step(world, dt = DT) {
+  world.events.length = 0;
+  world.tick++;
+  world.time += dt;
+
+  const ctx = {
+    world,
+    dt,
+    byId: new Map(),
+    grid: null,
+    stats: [],
+  };
+  for (const u of world.units) ctx.byId.set(u.id, u);
+  for (const b of world.buildings) ctx.byId.set(b.id, b);
+
+  for (const p of world.players) {
+    if (!p.alive) {
+      handleDead(ctx, p, dt);
+      ctx.stats[p.id] = null;
+      continue;
+    }
+    const st = (ctx.stats[p.id] = playerStats(world, p.id));
+    p.gold += st.income * dt;
+    if (p.isBot) updateBot(world, p, dt, st);
+    for (const cmd of p.commands) applyCommand(ctx, p, st, cmd);
+    p.commands.length = 0;
+    if (!p.commanderId) {
+      p.commanderRespawn -= dt;
+      if (p.commanderRespawn <= 0) {
+        const hq = ctx.byId.get(p.hqId);
+        const c = spawnUnit(world, p.id, 'commander', hq.x, hq.y + BUILDINGS.hq.radius + 40);
+        p.commanderId = c.id;
+        ctx.byId.set(c.id, c);
+      }
+    }
+  }
+
+  production(ctx);
+  ctx.grid = buildGrid(world.units, GRID_CELL);
+  updateUnits(ctx);
+  updateShrine(ctx);
+  updateBuildings(ctx);
+  collectCrystals(ctx);
+  cleanup(ctx);
+
+  if (world.crystals.length < WORLD.crystalCount) {
+    world.crystalTimer += dt;
+    if (world.crystalTimer >= WORLD.crystalRespawn) {
+      world.crystalTimer = 0;
+      spawnCrystal(world);
+    }
+  }
+}
+
+function handleDead(ctx, p, dt) {
+  const world = ctx.world;
+  if (p.left) { p.commands.length = 0; return; }
+  let wantsRespawn = false;
+  for (const cmd of p.commands) if (cmd.type === 'respawn') wantsRespawn = true;
+  p.commands.length = 0;
+  if (p.isBot) {
+    p.respawnIn -= dt;
+    if (p.respawnIn <= 0) wantsRespawn = true;
+  }
+  if (wantsRespawn) {
+    resetPlayer(world, p);
+    for (const u of world.units) if (u.owner === p.id) ctx.byId.set(u.id, u);
+    for (const b of world.buildings) if (b.owner === p.id) ctx.byId.set(b.id, b);
+    world.events.push({ type: 'spawned', player: p.id });
+  }
+}
+
+function notice(world, p, code) {
+  p.notice = { code, at: world.time };
+}
+
+function applyCommand(ctx, p, st, cmd) {
+  const world = ctx.world;
+  if (cmd.type === 'stance') {
+    p.hold = !p.hold;
+    world.events.push({ type: 'stance', player: p.id, hold: p.hold });
+    return;
+  }
+  if (cmd.type === 'cheat') {
+    if (!world.cheats && !p.admin) return;
+    p.gold += WORLD.cheatGold;
+    world.events.push({ type: 'cheat', player: p.id, gold: WORLD.cheatGold });
+    return;
+  }
+  if (cmd.type === 'train') {
+    const def = UNITS[cmd.kind];
+    if (!def || cmd.kind === 'commander') return;
+    if (def.needs && !st[def.needs]) return notice(world, p, def.needs);
+    if (p.gold < def.cost) return notice(world, p, 'gold');
+    if (st.supply + def.supply > st.cap) return notice(world, p, 'supply');
+    p.gold -= def.cost;
+    st.supply += def.supply;
+    p.queue.push(cmd.kind);
+    return;
+  }
+  if (cmd.type === 'build') {
+    if (!BUILD_KINDS[cmd.kind]) return;
+    const def = BUILDINGS[cmd.kind];
+    const c = ctx.byId.get(p.commanderId);
+    if (!c) return notice(world, p, 'commander');
+    const cost = buildingCost(cmd.kind, st);
+    if (p.gold < cost) return notice(world, p, 'gold');
+    let x, y;
+    if (Number.isFinite(cmd.x) && Number.isFinite(cmd.y) && Math.hypot(cmd.x - c.x, cmd.y - c.y) <= 220) {
+      x = cmd.x; y = cmd.y;
+    } else {
+      const reach = UNITS.commander.radius + def.radius + 14;
+      x = c.x + p.facing.x * reach;
+      y = c.y + p.facing.y * reach;
+    }
+    const m = def.radius + 20;
+    if (x < m || y < m || x > world.size - m || y > world.size - m) return notice(world, p, 'edge');
+    for (const b of world.buildings) {
+      const d = Math.hypot(b.x - x, b.y - y);
+      if (d < BUILDINGS[b.kind].radius + def.radius + 10) return notice(world, p, 'blocked');
+      if (b.owner !== p.id && d < WORLD.enemyBuildExclusion) return notice(world, p, 'enemy');
+    }
+    p.gold -= cost;
+    const b = spawnBuilding(world, p.id, cmd.kind, x, y);
+    ctx.byId.set(b.id, b);
+    if (cmd.kind === 'mine') st.mines++;
+    else if (cmd.kind === 'barracks') st.barracks++;
+    else if (cmd.kind === 'academy') st.academy++;
+    else st.towers++;
+    st.cap = Math.min(WORLD.maxSupply, st.cap + (def.supply || 0));
+    st.income += def.income || 0;
+    world.events.push({ type: 'built', x, y, kind: cmd.kind, owner: p.id });
+  }
+}
+
+function production(ctx) {
+  const world = ctx.world;
+  const n = world.buildings.length;
+  for (let i = 0; i < n; i++) {
+    const b = world.buildings[i];
+    if (!BUILDINGS[b.kind].trains) continue;
+    const p = world.players[b.owner];
+    if (b.train) {
+      b.train.left -= ctx.dt;
+      if (b.train.left <= 0) {
+        const r = BUILDINGS[b.kind].radius + UNITS[b.train.kind].radius + 4;
+        const a = (b.id * 2.399 + world.tick * 0.37) % (Math.PI * 2);
+        const u = spawnUnit(world, b.owner, b.train.kind, b.x + Math.cos(a) * r, b.y + Math.sin(a) * r);
+        ctx.byId.set(u.id, u);
+        b.train = null;
+      }
+    }
+    if (!b.train && p.queue.length) {
+      const kind = p.queue.shift();
+      b.train = { kind, left: UNITS[kind].train, total: UNITS[kind].train };
+    }
+  }
+}
+
+function radiusOf(e) {
+  return (UNITS[e.kind] || BUILDINGS[e.kind]).radius;
+}
+
+// Nearest enemy (unit or building) whose edge is within `range` of (x, y).
+function nearestEnemy(ctx, x, y, range, owner, withBuildings) {
+  let best = null, bestD = range;
+  queryGrid(ctx.grid, x, y, range + 20, (o) => {
+    if (o.owner === owner || o.hp <= 0) return;
+    const d = Math.hypot(o.x - x, o.y - y) - UNITS[o.kind].radius;
+    if (d < bestD) { bestD = d; best = o; }
+  });
+  if (withBuildings) {
+    const bs = ctx.world.buildings;
+    for (let i = 0; i < bs.length; i++) {
+      const b = bs[i];
+      if (b.owner === owner || b.hp <= 0) continue;
+      if (ctx.world.players[b.owner].shieldUntil > ctx.world.time) continue; // shielded base
+      const d = Math.hypot(b.x - x, b.y - y) - BUILDINGS[b.kind].radius;
+      if (d < bestD) { bestD = d; best = b; }
+    }
+  }
+  return best;
+}
+
+function dealDamage(ctx, attacker, target, amount, quiet) {
+  const world = ctx.world;
+  if (target.hp <= 0) return;
+  if (!UNITS[target.kind]) {
+    // Buildings behind a spawn shield take no damage; attacking a base drops your own shield.
+    if (world.players[target.owner].shieldUntil > world.time) return;
+    const atk = world.players[attacker.owner];
+    if (atk.shieldUntil > world.time) atk.shieldUntil = world.time;
+  }
+  target.hp -= amount;
+  target.hitAt = world.time;
+  target.hitBy = attacker.owner;
+  const isBuilding = !UNITS[target.kind];
+  if (isBuilding && target.kind === 'hq') world.players[target.owner].hqHitAt = world.time;
+  const ranged = (UNITS[attacker.kind] || BUILDINGS[attacker.kind]).range > 50;
+  if (quiet) {
+    // splash victim: the splash event already shows it
+  } else if (ranged) {
+    world.events.push({ type: 'shot', kind: attacker.kind, x1: attacker.x, y1: attacker.y, x2: target.x, y2: target.y, owner: attacker.owner });
+  } else {
+    world.events.push({ type: 'hit', x: target.x, y: target.y, owner: attacker.owner });
+  }
+  if (target.hp <= 0) {
+    const killer = world.players[attacker.owner];
+    if (isBuilding) {
+      killer.score += target.kind === 'hq' ? 500 : BUILDINGS[target.kind].cost;
+    } else {
+      killer.kills++;
+      killer.score += target.kind === 'commander' ? 100 : UNITS[target.kind].cost;
+    }
+  }
+}
+
+// The Kristalhart: a king standing on it without rival kings claims it after a few seconds.
+function updateShrine(ctx) {
+  const world = ctx.world, sh = world.shrine, dt = ctx.dt;
+  let present = -1, count = 0;
+  for (const p of world.players) {
+    if (!p.alive || !p.commanderId) continue;
+    const k = ctx.byId.get(p.commanderId);
+    if (!k || k.hp <= 0 || Math.hypot(k.x - sh.x, k.y - sh.y) > sh.r) continue;
+    present = p.id;
+    count++;
+  }
+  if (count === 1 && present !== sh.owner) {
+    if (sh.contender !== present) { sh.contender = present; sh.progress = 0; }
+    sh.progress += dt / WORLD.shrineCapture;
+    if (sh.progress >= 1) {
+      sh.owner = present;
+      sh.contender = -1;
+      sh.progress = 0;
+      world.players[present].score += 150;
+      world.events.push({ type: 'captured', player: present, x: sh.x, y: sh.y });
+    }
+  } else if (count !== 1 || present === sh.owner) {
+    // nobody is claiming (or it is contested): the claim fades
+    sh.progress = Math.max(0, sh.progress - dt / WORLD.shrineCapture);
+    if (sh.progress === 0) sh.contender = -1;
+  }
+  const owner = world.players[sh.owner];
+  if (owner && owner.alive) {
+    owner.gold += WORLD.shrineIncome * dt;
+    owner.score += WORLD.shrineScore * dt;
+  }
+}
+
+function attack(ctx, u, def, target) {
+  const world = ctx.world;
+  u.cd = def.cd;
+  let mult = def.buildingMult && !UNITS[target.kind] ? def.buildingMult : 1;
+  if (def.charge && world.time - u.atkAt > 3) {
+    mult *= def.charge;
+    world.events.push({ type: 'charge', x: target.x, y: target.y, owner: u.owner });
+  }
+  u.atkAt = world.time;
+  dealDamage(ctx, u, target, def.dmg * mult);
+  if (!def.splash) return;
+  world.events.push({ type: 'splash', kind: u.kind, x: target.x, y: target.y, r: def.splash, owner: u.owner });
+  queryGrid(ctx.grid, target.x, target.y, def.splash + 20, (o) => {
+    if (o === target || o.owner === u.owner || o.hp <= 0) return;
+    if (Math.hypot(o.x - target.x, o.y - target.y) <= def.splash + UNITS[o.kind].radius) dealDamage(ctx, u, o, def.dmg, true);
+  });
+}
+
+// Healers mend the most wounded friendly unit in reach.
+function heal(ctx, u, def) {
+  let best = null, bestMissing = 4;
+  queryGrid(ctx.grid, u.x, u.y, def.range, (o) => {
+    if (o.owner !== u.owner || o === u || o.hp <= 0) return;
+    const missing = o.maxHp - o.hp;
+    if (missing > bestMissing && Math.hypot(o.x - u.x, o.y - u.y) <= def.range) { bestMissing = missing; best = o; }
+  });
+  if (!best) { u.cd = 0.25; return; }
+  u.cd = def.cd;
+  u.atkAt = ctx.world.time;
+  best.hp = Math.min(best.maxHp, best.hp + def.heal);
+  ctx.world.events.push({ type: 'heal', x1: u.x, y1: u.y, x: best.x, y: best.y, owner: u.owner });
+}
+
+function slotOffset(i, out) {
+  let ring = 0, cap = 7, idx = i;
+  while (idx >= cap) { idx -= cap; ring++; cap = 7 + ring * 5; }
+  const a = (idx / cap) * Math.PI * 2 + ring * 0.4;
+  const r = 50 + ring * 30;
+  out.x = Math.cos(a) * r;
+  out.y = Math.sin(a) * r;
+}
+
+const _slot = { x: 0, y: 0 };
+const _pos = { x: 0, y: 0 };
+
+function updateUnits(ctx) {
+  const world = ctx.world, dt = ctx.dt;
+  const units = world.units;
+  const slotCount = [];
+  const n = units.length;
+  for (let i = 0; i < n; i++) {
+    const u = units[i];
+    if (u.hp <= 0) continue;
+    u.px = u.x;
+    u.py = u.y;
+    u.cd -= dt;
+    const def = UNITS[u.kind];
+    const p = world.players[u.owner];
+    let vx = 0, vy = 0;
+
+    if (u.kind === 'commander') {
+      vx = p.input.mx * def.speed;
+      vy = p.input.my * def.speed;
+      if (vx !== 0 || vy !== 0) {
+        const l = Math.hypot(vx, vy);
+        p.facing.x = u.fx = vx / l;
+        p.facing.y = u.fy = vy / l;
+      }
+      const t = nearestEnemy(ctx, u.x, u.y, def.range + def.radius, u.owner, true);
+      if (t && u.cd <= 0) {
+        u.cd = def.cd;
+        u.atkAt = world.time;
+        dealDamage(ctx, u, t, def.dmg);
+      }
+      u.targetId = t ? t.id : 0;
+      const hq = ctx.byId.get(p.hqId);
+      if (hq && u.hp < u.maxHp && world.time - u.hitAt > 3 &&
+          Math.hypot(hq.x - u.x, hq.y - u.y) < WORLD.hqRegenRange) {
+        u.hp = Math.min(u.maxHp, u.hp + WORLD.hqRegenPerSec * dt);
+      }
+    } else {
+      const idx = slotCount[u.owner] || 0;
+      slotCount[u.owner] = idx + 1;
+      const cmd = ctx.byId.get(p.commanderId);
+      const anchor = cmd && cmd.hp > 0 && !p.hold ? cmd : ctx.byId.get(p.hqId);
+      slotOffset(idx, _slot);
+      const spread = anchor === cmd ? 1 : 1.9;
+      const sx = anchor.x + _slot.x * spread, sy = anchor.y + _slot.y * spread;
+      const anchorDist = Math.hypot(anchor.x - u.x, anchor.y - u.y);
+
+      if (u.ret) {
+        if (anchorDist < 180) u.ret = false;
+      } else if (anchorDist > WORLD.leashRange) {
+        u.ret = true;
+        u.targetId = 0;
+      }
+
+      let target = null;
+      if (def.heal) {
+        if (u.cd <= 0) heal(ctx, u, def);
+      } else if (!u.ret) {
+        target = u.targetId ? ctx.byId.get(u.targetId) : null;
+        if (target && target.hp <= 0) target = null;
+        if (!target || (world.tick + u.id) % 4 === 0) {
+          target = nearestEnemy(ctx, u.x, u.y, WORLD.aggroRange, u.owner, true);
+        }
+        u.targetId = target ? target.id : 0;
+      }
+
+      if (target) {
+        const dx = target.x - u.x, dy = target.y - u.y;
+        const d = Math.hypot(dx, dy) || 0.001;
+        u.fx = dx / d;
+        u.fy = dy / d;
+        if (d - def.radius - radiusOf(target) <= def.range) {
+          if (u.cd <= 0) attack(ctx, u, def, target);
+        } else {
+          vx = (dx / d) * def.speed;
+          vy = (dy / d) * def.speed;
+        }
+      } else {
+        const dx = sx - u.x, dy = sy - u.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 3) {
+          const sp = Math.min(FOLLOW_SPEED, d * 5);
+          vx = (dx / d) * sp;
+          vy = (dy / d) * sp;
+          u.fx = dx / d;
+          u.fy = dy / d;
+        }
+      }
+    }
+
+    // Separation: push overlapping units apart.
+    let ox = 0, oy = 0;
+    const r = def.radius;
+    queryGrid(ctx.grid, u.x, u.y, r + 16, (o) => {
+      if (o === u || o.hp <= 0) return;
+      const minD = r + UNITS[o.kind].radius + 2;
+      let dx = u.x - o.x, dy = u.y - o.y;
+      let d = Math.hypot(dx, dy);
+      if (d >= minD) return;
+      if (d < 0.01) {
+        const a = (u.id - o.id) * 2.399;
+        dx = Math.cos(a); dy = Math.sin(a); d = 1;
+      }
+      const push = (minD - d) / minD;
+      ox += (dx / d) * push;
+      oy += (dy / d) * push;
+    });
+    const sepK = u.kind === 'commander' ? 30 : 150;
+    let nx = u.x + (vx + ox * sepK) * dt;
+    let ny = u.y + (vy + oy * sepK) * dt;
+
+    // Buildings are solid (unless you fly).
+    if (!def.flying) {
+      pushOutOfBuildings(world.buildings, nx, ny, r, _pos);
+      nx = _pos.x;
+      ny = _pos.y;
+    }
+
+    const max = world.size - r;
+    u.x = nx < r ? r : nx > max ? max : nx;
+    u.y = ny < r ? r : ny > max ? max : ny;
+  }
+}
+
+function updateBuildings(ctx) {
+  const world = ctx.world;
+  for (const b of world.buildings) {
+    const def = BUILDINGS[b.kind];
+    if (!def.dmg || b.hp <= 0) continue;
+    b.cd -= ctx.dt;
+    if (b.cd > 0) continue;
+    const t = nearestEnemy(ctx, b.x, b.y, def.range, b.owner, false);
+    if (t) {
+      b.cd = def.cd;
+      dealDamage(ctx, b, t, def.dmg);
+    }
+  }
+}
+
+function collectCrystals(ctx) {
+  const world = ctx.world;
+  const cs = world.crystals;
+  for (let i = cs.length - 1; i >= 0; i--) {
+    const c = cs[i];
+    let taker = null;
+    queryGrid(ctx.grid, c.x, c.y, WORLD.pickupRadius, (u) => {
+      if (taker || u.hp <= 0) return;
+      if (Math.hypot(u.x - c.x, u.y - c.y) <= WORLD.pickupRadius) taker = u;
+    });
+    if (!taker) continue;
+    const p = world.players[taker.owner];
+    p.gold += c.value;
+    p.score += 10;
+    world.events.push({ type: 'collect', x: c.x, y: c.y, owner: p.id, value: c.value });
+    cs[i] = cs[cs.length - 1];
+    cs.pop();
+  }
+}
+
+function cleanup(ctx) {
+  const world = ctx.world;
+  // A destroyed HQ takes the whole player down with it.
+  for (const b of world.buildings) {
+    if (b.kind !== 'hq' || b.hp > 0) continue;
+    const loser = world.players[b.owner];
+    if (!loser.alive) continue;
+    loser.alive = false;
+    loser.respawnIn = WORLD.botRespawn;
+    loser.queue.length = 0;
+    loser.commanderId = 0;
+    if (world.shrine.owner === loser.id) world.shrine.owner = -1;
+    const winner = world.players[b.hitBy];
+    let bounty = 0;
+    if (winner && winner !== loser && winner.alive) {
+      bounty = WORLD.hqBounty + Math.floor(loser.gold / 2);
+      winner.gold += bounty;
+    }
+    world.events.push({
+      type: 'eliminated', player: loser.id, by: winner ? winner.id : -1,
+      bounty, score: Math.floor(loser.score), x: b.x, y: b.y,
+    });
+    for (const u of world.units) if (u.owner === loser.id) u.hp = 0;
+    for (const o of world.buildings) if (o.owner === loser.id) o.hp = 0;
+  }
+
+  let w = 0;
+  for (let i = 0; i < world.units.length; i++) {
+    const u = world.units[i];
+    if (u.hp > 0) { world.units[w++] = u; continue; }
+    world.events.push({ type: 'death', x: u.x, y: u.y, kind: u.kind, owner: u.owner });
+    if (u.kind === 'commander') {
+      const p = world.players[u.owner];
+      if (p.commanderId === u.id) {
+        p.commanderId = 0;
+        p.commanderRespawn = WORLD.commanderRespawn;
+        p.input.mx = p.input.my = 0;
+      }
+    }
+  }
+  world.units.length = w;
+
+  w = 0;
+  for (let i = 0; i < world.buildings.length; i++) {
+    const b = world.buildings[i];
+    if (b.hp > 0) { world.buildings[w++] = b; continue; }
+    world.events.push({ type: 'death', x: b.x, y: b.y, kind: b.kind, owner: b.owner });
+  }
+  world.buildings.length = w;
+}

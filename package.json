@@ -1,0 +1,15 @@
+{
+  "name": "browser-rts",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "headless": "node scripts/headless.js"
+  },
+  "dependencies": {
+    "ws": "^8.22.2"
+  }
+}
