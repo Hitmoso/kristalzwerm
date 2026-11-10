@@ -24,6 +24,20 @@ const nameEl = $('name'), playBtn = $('play'), statusEl = $('status');
 const game = { world: null, me: null, playing: false, net: null, fps: 60, stepMs: 0, drawMs: 0 };
 window.__game = game;
 
+// The admin key arrives once in the link (?admin=…). Keep it for this tab only and take it
+// out of the address bar straight away, so copying the address never shares it.
+let adminKey;
+try {
+  const url = new URL(location.href);
+  const fromUrl = url.searchParams.get('admin');
+  if (fromUrl) {
+    try { sessionStorage.setItem('kz-admin', fromUrl); } catch { /* private window */ }
+    url.searchParams.delete('admin');
+    history.replaceState(null, '', url);
+  }
+  adminKey = fromUrl || sessionStorage.getItem('kz-admin') || undefined;
+} catch { /* storage blocked: the key from the link still works this once */ }
+
 const sfx = createSfx();
 
 function act(cmd) {
@@ -96,7 +110,7 @@ function startOnline() {
   playBtn.disabled = true;
   playBtn.textContent = 'Verbinden…';
   say('');
-  const key = new URLSearchParams(location.search).get('admin') || undefined;
+  const key = adminKey;
   const net = connect({
     name, key, room: cleanRoom(roomEl.value),
     onReady(n) {
@@ -112,7 +126,7 @@ function startOnline() {
       const url = new URL(location.href);
       if (n.room) url.searchParams.set('kamer', n.room); else url.searchParams.delete('kamer');
       history.replaceState(null, '', url);
-      const invite = new URL(url); invite.searchParams.delete('admin');
+      const invite = new URL(url);
       hud.setRoom(n.room, invite.href);
     },
     onClose(why) {

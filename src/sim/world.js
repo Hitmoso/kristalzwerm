@@ -132,6 +132,9 @@ export function removePlayer(world, playerId) {
   p.left = true;
   p.alive = false;
   if (world.shrine.owner === playerId) world.shrine.owner = -1;
+  // an order from an admin who left, or aimed at someone who left, stops with them
+  const ord = world.botOrder;
+  if (ord && (ord.by === playerId || ord.target === playerId)) world.botOrder = null;
   p.commanderId = 0;
   p.commands.length = 0;
   p.queue.length = 0;

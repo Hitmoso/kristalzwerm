@@ -2,8 +2,8 @@
 // and get back a snapshot of what is near their king.
 
 import {
-  createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById,
-  DT, UNITS, BOT_NAMES,
+  createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById, moveKing,
+  DT, UNITS, WORLD, BOT_NAMES,
 } from '../sim/index.js';
 import {
   UNIT_KINDS, BUILDING_KINDS, SNAPSHOT_EVERY, MINIMAP_EVERY, VIEW_HALF_W, VIEW_HALF_H,
@@ -16,8 +16,8 @@ const MIN_BOTS = 2;
 const BOT_LEVELS = ['normal', 'easy', 'hard', 'normal', 'easy', 'normal'];
 const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, boost: 1, order: 1 };
 const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
-const INPUT_QUEUE = 6;   // inputs buffered per client; older ones are dropped
-const INPUT_GRACE = 8;   // ticks to keep walking when inputs stop arriving (hidden tab, hiccup)
+const INPUT_QUEUE = 10;  // inputs buffered per client; older ones are dropped
+const MAX_DEBT = 8;      // ticks of late input we are willing to catch up on
 const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, stance: 1, boost: 1, order: 1 };
 
 export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
@@ -72,15 +72,30 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     const world = room.world;
     // Exactly one input per client per tick: the client predicted it as one tick of
     // movement, so applying it as one tick here keeps both in lockstep.
+    // Late input is never guessed at: the king simply waits that tick, and the missed step
+    // is made up later — at most one extra per tick, and only as many as were missed, so
+    // sending inputs faster than real time gains nothing.
     for (const c of room.clients) {
       const inp = c.inputs.shift();
-      if (inp) {
-        setInput(world, c.playerId, inp.x, inp.y);
-        c.ack = inp.s;
-        c.idle = 0;
-      } else if (++c.idle === INPUT_GRACE) {
+      if (!inp) {
         setInput(world, c.playerId, 0, 0);
+        if (c.debt < MAX_DEBT) c.debt++;
+        continue;
       }
+      let last = inp;
+      if (c.debt > 0 && c.inputs.length) {
+        // catch up: apply this input now, the next one in this tick's step
+        const p = world.players[c.playerId];
+        const king = p.commanderId ? findById(world.units, p.commanderId) : null;
+        if (king) {
+          setInput(world, c.playerId, inp.x, inp.y); // same normalising as a regular input
+          moveKing(king, p.input.mx, p.input.my, p.boost ? WORLD.boost : 1, DT, world.buildings, world.size);
+        }
+        last = c.inputs.shift();
+        c.debt--;
+      }
+      setInput(world, c.playerId, last.x, last.y);
+      c.ack = last.s;
     }
     step(world, DT);
     for (const c of room.clients) {
@@ -167,7 +182,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     const name = cleanName(hello?.name);
     const player = addPlayer(room.world, { name });
     player.admin = !!adminKey && hello?.key === adminKey;
-    const c = { send, playerId: player.id, events: [], crystalSig: NaN, inputs: [], ack: 0, lastIn: 0, idle: 0, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
+    const c = { send, playerId: player.id, events: [], crystalSig: NaN, inputs: [], ack: 0, lastIn: 0, debt: 0, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
     room.clients.add(c);
     balanceBots();
     send({ t: 'init', room: code, id: player.id, size: room.world.size, snapHz: 30 / SNAPSHOT_EVERY, admin: player.admin });

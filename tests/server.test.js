@@ -87,7 +87,7 @@ test('the input queue is bounded and stale or broken inputs are ignored', async 
   const a = fakeClient(game, { name: 'Anna' });
   t.after(() => game.leave(a.c)); // never leave a world ticking, even when an assert fails
   for (let i = 1; i <= 50; i++) game.receive(a.c, { t: 'in', s: i, x: 1, y: 0 });
-  assert.ok(a.c.inputs.length <= 6);
+  assert.ok(a.c.inputs.length <= 10);
   game.receive(a.c, { t: 'in', s: 3, x: 0, y: 1 });       // older than what we have
   game.receive(a.c, { t: 'in', s: 1.5, x: 0, y: 1 });     // not an integer
   game.receive(a.c, { t: 'in', s: 99, x: 'x', y: 1 });    // not a number
@@ -95,4 +95,27 @@ test('the input queue is bounded and stale or broken inputs are ignored', async 
   game.receive(a.c, { t: 'cmd', c: { type: 'order', order: 'center' } }); // not an admin
   await wait(150);
   assert.equal(game.room.world.botOrder, null);
+});
+
+test('late inputs are caught up exactly, but never faster than real time', async (t) => {
+  const game = createRoom({});
+  const a = fakeClient(game, { name: 'Anna' });
+  t.after(() => game.leave(a.c));
+  await wait(300);
+  const start = a.snaps().at(-1).you;
+  // 10 inputs arrive in one burst after a 300 ms silence: all are used, none twice
+  for (let i = 1; i <= 10; i++) game.receive(a.c, { t: 'in', s: i, x: 1, y: 0 });
+  await wait(600);
+  const you = a.snaps().at(-1).you;
+  assert.equal(you.ack, 10);
+  const moved = you.kx - start.kx;
+  assert.ok(Math.abs(moved - 10 * 190 / 30) < 1, `moved ${moved}, expected ${10 * 190 / 30}`);
+  // a flood of inputs cannot buy extra speed: no debt, so one input per tick
+  const before = a.snaps().at(-1).you;
+  for (let i = 11; i <= 400; i++) game.receive(a.c, { t: 'in', s: i, x: 1, y: 0 });
+  await wait(300);
+  const after = a.snaps().at(-1).you;
+  // ~9 ticks passed; at most 8 more may be owed from the pause before. 390 would be cheating.
+  const steps = (after.kx - before.kx) / (190 / 30);
+  assert.ok(steps <= 9 + 8 + 3, `walked ${steps.toFixed(1)} steps`);
 });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createWorld, addPlayer, queueCommand, setInput, playerStats, step, findById, spawnUnit,
+  createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById, spawnUnit,
   DT, WORLD, UNITS,
 } from '../src/sim/index.js';
 
@@ -281,5 +281,12 @@ test('bots obey an admin order and drop it when the target falls', () => {
   assert.equal(bots[2].bot.goal, 'defend', 'the target defends itself');
   findById(world.buildings, bots[2].hqId).hp = 0;
   step(world);
+  assert.equal(world.botOrder, null);
+
+  // an order ends when the admin who gave it leaves
+  queueCommand(world, me.id, { type: 'order', order: 'home' });
+  step(world);
+  assert.equal(world.botOrder.order, 'home');
+  removePlayer(world, me.id);
   assert.equal(world.botOrder, null);
 });
