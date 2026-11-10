@@ -9,6 +9,7 @@ import { createInput } from './input.js';
 import { createHud } from './hud.js';
 import { connect } from './net.js';
 import { createSfx } from './sfx.js';
+import { createAdmin } from './admin.js';
 import { cleanRoom } from '../net/protocol.js';
 
 const MAX_STEPS_PER_FRAME = 5;
@@ -38,6 +39,7 @@ function act(cmd) {
 
 const hud = createHud(act);
 const input = createInput(canvas, act);
+const admin = createAdmin(act);
 hud.setMuted(sfx.isMuted());
 const roomEl = $('roomCode');
 roomEl.value = cleanRoom(new URLSearchParams(location.search).get('kamer'));
@@ -80,6 +82,7 @@ function say(text) {
 function startLocal() {
   sfx.unlock();
   hud.setRoom('');
+  admin.show(true); // practice: you are always the admin
   if (game.net) { game.net.close(); game.net = null; }
   newLocalWorld(true);
   enterGame();
@@ -100,6 +103,7 @@ function startOnline() {
       game.net = n;
       game.world = n.world;
       game.me = n.me;
+      admin.show(!!n.admin);
       game.playing = true;
       renderer.effects.length = 0;
       lookAtKing();
@@ -150,6 +154,10 @@ function handleEvents(world, me) {
   renderer.addEvents(world, game.playing ? me.id : -1);
   if (!game.playing) return;
   hud.events(world, me);
+  for (const e of world.events) {
+    if (e.type === 'boost' && e.player === me.id) hud.say(e.on ? 'Turbo aan' : 'Turbo uit');
+    if (e.type === 'order' && (e.player === me.id || e.reason === 'done')) hud.say(e.reason === 'done' ? 'Doelwit uitgeschakeld — bots spelen weer zelf' : admin.say(e.order, e.target, world, me));
+  }
   sfx.fromEvents(world.events, renderer.cam, me.id);
   if (me.notice && me.notice.at !== lastNotice) { lastNotice = me.notice.at; sfx.play('refuse'); }
   if (me.alive && world.time - me.hqHitAt < 0.5 && world.time - lastAlarm > 5) { lastAlarm = world.time; sfx.play('alarm'); }
@@ -226,7 +234,11 @@ function frame(now) {
   game.drawMs += (performance.now() - d0 - game.drawMs) * 0.05;
 
   hudTimer += dt;
-  if (game.playing && hudTimer > 0.1) { hudTimer = 0; hud.update(world, me, net ? me.stats : undefined); }
+  if (game.playing && hudTimer > 0.1) {
+    hudTimer = 0;
+    hud.update(world, me, net ? me.stats : undefined);
+    admin.update(world, me);
+  }
 }
 
 // Debug hooks for automated play tests.
@@ -235,6 +247,7 @@ game.advance = (seconds) => {
   if (game.net) return;
   for (let i = 0; i < seconds / DT; i++) localTick();
   hud.update(game.world, game.me);
+  admin.update(game.world, game.me);
 };
 
 newLocalWorld(false); // bots play behind the start screen

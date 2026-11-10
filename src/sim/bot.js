@@ -257,6 +257,18 @@ function think(world, p, st, diff, king, hq) {
   // --- where to go ---
   bot.slow = false;
   if (!king) return setGoal(bot, 'home', homeX, homeY, -1);
+
+  // An admin's order overrides everything below (but not the economy above).
+  const ord = world.botOrder;
+  if (ord) {
+    if (ord.order === 'center') return setGoal(bot, 'capture', world.shrine.x, world.shrine.y, -1);
+    if (ord.order === 'home' || ord.target === p.id) return setGoal(bot, 'defend', homeX, homeY, -1);
+    const t = world.players[ord.target];
+    const tk = t && t.commanderId ? findById(world.units, t.commanderId) : null;
+    const th = t ? findById(world.buildings, t.hqId) : null;
+    const aim = tk || th;
+    if (aim) return setGoal(bot, 'attack', aim.x, aim.y, t.id);
+  }
   const hp = king.hp / king.maxHp;
   const distHome = Math.hypot(king.x - hq.x, king.y - hq.y);
 

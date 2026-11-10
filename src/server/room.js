@@ -14,8 +14,11 @@ const MAX_HUMANS = 10;
 const TARGET_PLAYERS = 6;   // bots fill the world up to this many players
 const MIN_BOTS = 2;
 const BOT_LEVELS = ['normal', 'easy', 'hard', 'normal', 'easy', 'normal'];
-const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1 };
-const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, stance: 1 };
+const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, boost: 1, order: 1 };
+const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
+const INPUT_QUEUE = 6;   // inputs buffered per client; older ones are dropped
+const INPUT_GRACE = 8;   // ticks to keep walking when inputs stop arriving (hidden tab, hiccup)
+const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, stance: 1, boost: 1, order: 1 };
 
 export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
   const room = { world: null, clients: new Set(), timer: null, snapCount: 0 };
@@ -67,6 +70,18 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
 
   function tick() {
     const world = room.world;
+    // Exactly one input per client per tick: the client predicted it as one tick of
+    // movement, so applying it as one tick here keeps both in lockstep.
+    for (const c of room.clients) {
+      const inp = c.inputs.shift();
+      if (inp) {
+        setInput(world, c.playerId, inp.x, inp.y);
+        c.ack = inp.s;
+        c.idle = 0;
+      } else if (++c.idle === INPUT_GRACE) {
+        setInput(world, c.playerId, 0, 0);
+      }
+    }
     step(world, DT);
     for (const c of room.clients) {
       for (const e of world.events) {
@@ -132,9 +147,11 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       you: {
         gold: Math.floor(me.gold), q: me.queue.length, cresp: +me.commanderRespawn.toFixed(1),
         spawned: +me.spawnedAt.toFixed(2), notice: me.notice, st, hold: me.hold ? 1 : 0,
+        ack: c.ack, boost: me.boost ? 1 : 0, kx: king ? king.x : 0, ky: king ? king.y : 0,
       },
       p: shared.p, b: shared.b, u,
       sh: [world.shrine.owner, world.shrine.contender, Math.round(world.shrine.progress * 100)],
+      bo: world.botOrder ? [world.botOrder.order, world.botOrder.target] : null,
     };
     // Crystals only change when one is picked up or appears: send the list just then.
     if (c.crystalSig !== shared.sig) { c.crystalSig = shared.sig; msg.c = shared.c; }
@@ -150,7 +167,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     const name = cleanName(hello?.name);
     const player = addPlayer(room.world, { name });
     player.admin = !!adminKey && hello?.key === adminKey;
-    const c = { send, playerId: player.id, events: [], crystalSig: NaN, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
+    const c = { send, playerId: player.id, events: [], crystalSig: NaN, inputs: [], ack: 0, lastIn: 0, idle: 0, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
     room.clients.add(c);
     balanceBots();
     send({ t: 'init', room: code, id: player.id, size: room.world.size, snapHz: 30 / SNAPSHOT_EVERY, admin: player.admin });
@@ -171,8 +188,11 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
   function receive(c, msg) {
     if (!room.world || !msg || typeof msg !== 'object') return;
     if (msg.t === 'in') {
-      const x = Number(msg.x), y = Number(msg.y);
-      if (Number.isFinite(x) && Number.isFinite(y)) setInput(room.world, c.playerId, x, y);
+      const x = Number(msg.x), y = Number(msg.y), s = msg.s;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isSafeInteger(s) || s <= c.lastIn) return;
+      c.lastIn = s;
+      if (c.inputs.length >= INPUT_QUEUE) c.inputs.shift(); // running ahead: drop the oldest
+      c.inputs.push({ s, x, y });
     } else if (msg.t === 'cmd') {
       const now = Date.now();
       if (now - c.cmdWindow > 1000) { c.cmdWindow = now; c.cmdCount = 0; }
@@ -181,6 +201,12 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       if (!COMMANDS[type]) return;
       if (kind !== undefined && typeof kind !== 'string') return;
       if (kind && !UNITS[kind] && !BUILDING_KINDS.includes(kind)) return;
+      if (type === 'order') {
+        const order = msg.c.order, target = msg.c.target;
+        if (!ORDERS[order] || (target !== undefined && !Number.isSafeInteger(target))) return;
+        queueCommand(room.world, c.playerId, { type, order, target });
+        return;
+      }
       queueCommand(room.world, c.playerId, { type, kind });
     }
   }

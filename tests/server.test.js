@@ -35,8 +35,9 @@ test('two players share one world, move, and leave cleanly', async () => {
 
   // input moves only your own king
   const before = a.king(), otherBefore = b.king();
-  game.receive(a.c, { t: 'in', x: 1, y: 0 });
-  await wait(600);
+  for (let i = 1; i <= 18; i++) { game.receive(a.c, { t: 'in', s: i, x: 1, y: 0 }); await wait(33); }
+  await wait(400);
+  assert.equal(a.snaps().at(-1).you.ack, 18, 'every input is acknowledged');
   assert.ok(a.king().x - before.x > 60, `moved ${a.king().x - before.x}`);
   assert.ok(Math.abs(b.king().x - otherBefore.x) < 1);
 
@@ -79,4 +80,19 @@ test('room codes are cleaned and stance reaches the simulation', async () => {
   assert.equal(s.you.hold, 1);
   assert.deepEqual(s.sh, [-1, -1, 0]);
   game.leave(a.c);
+});
+
+test('the input queue is bounded and stale or broken inputs are ignored', async (t) => {
+  const game = createRoom({});
+  const a = fakeClient(game, { name: 'Anna' });
+  t.after(() => game.leave(a.c)); // never leave a world ticking, even when an assert fails
+  for (let i = 1; i <= 50; i++) game.receive(a.c, { t: 'in', s: i, x: 1, y: 0 });
+  assert.ok(a.c.inputs.length <= 6);
+  game.receive(a.c, { t: 'in', s: 3, x: 0, y: 1 });       // older than what we have
+  game.receive(a.c, { t: 'in', s: 1.5, x: 0, y: 1 });     // not an integer
+  game.receive(a.c, { t: 'in', s: 99, x: 'x', y: 1 });    // not a number
+  assert.ok(a.c.inputs.every((i) => i.y === 0));
+  game.receive(a.c, { t: 'cmd', c: { type: 'order', order: 'center' } }); // not an admin
+  await wait(150);
+  assert.equal(game.room.world.botOrder, null);
 });

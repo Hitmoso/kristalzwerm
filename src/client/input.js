@@ -26,10 +26,14 @@ const ACTIONS = {
   KeyM: { type: 'mute' },
 };
 
-const SECRET = ['KeyG', 'KeyO', 'KeyU', 'KeyD']; // type G-O-U-D
+// Typed codes. Only letters the game does not already use, so typing them does nothing else.
+const SECRETS = [
+  { keys: ['KeyG', 'KeyO', 'KeyU', 'KeyD'], action: { type: 'cheat' } }, // G-O-U-D: 1000 gold
+  { keys: ['KeyV', 'KeyL', 'KeyU', 'KeyG'], action: { type: 'boost' } }, // V-L-U-G: turbo on/off
+];
 
 export function createInput(canvas, onAction) {
-  let secretAt = 0;
+  const typed = [];
   const held = new Set();
   const mouse = { down: false, x: 0, y: 0 };
 
@@ -39,8 +43,11 @@ export function createInput(canvas, onAction) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.target instanceof HTMLInputElement) return; // typing a name
     if (!e.repeat) {
-      secretAt = e.code === SECRET[secretAt] ? secretAt + 1 : e.code === SECRET[0] ? 1 : 0;
-      if (secretAt === SECRET.length) { secretAt = 0; onAction({ type: 'cheat' }); }
+      typed.push(e.code);
+      if (typed.length > 4) typed.shift();
+      for (const s of SECRETS) {
+        if (s.keys.every((k, i) => typed[typed.length - s.keys.length + i] === k)) { typed.length = 0; onAction(s.action); }
+      }
     }
     if (MOVE[e.code]) { held.add(e.code); e.preventDefault(); return; }
     const a = ACTIONS[e.code];

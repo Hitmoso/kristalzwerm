@@ -21,16 +21,25 @@ Open daarna http://localhost:5173. Vrienden op hetzelfde wifi-netwerk gebruiken 
 | Spatie | leger bij het kasteel laten of meenemen |
 | M | geluid aan/uit |
 
-## Adminrechten (goudcode)
+## Adminrechten
 
-- **Oefenen tegen bots:** typ `G` `O` `U` `D` tijdens het spel voor 1000 goud.
+Als admin heb je links een uitklapbaar **Admin**-menu, plus twee codes die je tijdens het spel intypt:
+
+| Code | Wat |
+|---|---|
+| `G` `O` `U` `D` | 1000 goud |
+| `V` `L` `U` `G` | turbo aan/uit: je koning loopt 3,5× zo snel |
+
+In het menu stuur je alle bots tegelijk: naar het Kristalhart, naar huis, een speler aanvallen (ook jezelf), of weer vrij spelen. Een aanvalsbevel stopt vanzelf als het doelwit is uitgeschakeld.
+
+- **Oefenen tegen bots:** je bent altijd admin.
 - **Online:** start de server met een geheime sleutel en open het spel met die sleutel in de link:
 
   ```powershell
   $env:ADMIN_KEY='jouw-geheim'; npm start
   ```
 
-  Ga naar `http://localhost:5173/?admin=jouw-geheim` en typ `G` `O` `U` `D`. Zonder de juiste sleutel doet de code online niets. De uitnodigingslink voor een kamer bevat de sleutel niet.
+  Ga naar `http://localhost:5173/?admin=jouw-geheim`. Zonder de juiste sleutel is er geen menu en doen de codes niets. De uitnodigingslink voor een kamer bevat de sleutel niet.
 
 ## Online zetten (Render)
 

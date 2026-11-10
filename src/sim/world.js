@@ -20,6 +20,7 @@ export function createWorld({ seed = 1, size = WORLD.size, cheats = false } = {}
     events: [],
     crystalTimer: 0,
     // King-of-the-hill objective: stand on it alone with your king to claim it.
+    botOrder: null, // admin order for all bots: { order, target, by }
     shrine: { x: size / 2, y: size / 2, r: WORLD.shrineRadius, owner: -1, contender: -1, progress: 0 },
   };
   for (let i = 0; i < WORLD.crystalCount; i++) spawnCrystal(world);
@@ -51,6 +52,7 @@ export function addPlayer(world, { name = 'Speler', isBot = false, difficulty = 
     difficulty,
     alive: false,
     hold: false, // true = army guards the castle instead of following the king
+    boost: false, // admin: king walks WORLD.boost times as fast
     left: false,
     admin: false,
     gold: 0,
@@ -155,6 +157,19 @@ export function pushOutOfBuildings(buildings, x, y, r, out) {
   out.x = x;
   out.y = y;
   return out;
+}
+
+// One step of king movement. Used by the simulation and, unchanged, by the online client
+// to predict its own king — any difference between the two shows up as rubber banding.
+// The king is deliberately not shoved by other units, so this is all there is to it.
+export function moveKing(pos, mx, my, mult, dt, buildings, size) {
+  const r = UNITS.commander.radius;
+  const speed = UNITS.commander.speed * mult;
+  pushOutOfBuildings(buildings, pos.x + mx * speed * dt, pos.y + my * speed * dt, r, pos);
+  const max = size - r;
+  pos.x = pos.x < r ? r : pos.x > max ? max : pos.x;
+  pos.y = pos.y < r ? r : pos.y > max ? max : pos.y;
+  return pos;
 }
 
 export function spawnUnit(world, owner, kind, x, y) {

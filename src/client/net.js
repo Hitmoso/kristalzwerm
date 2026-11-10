@@ -1,7 +1,14 @@
 // Online session: keeps a local mirror of the server's world in the same shape the
 // renderer and HUD already understand, and smooths movement between snapshots.
+//
+// Your own king is predicted, not waited for. Every simulation tick the client turns the
+// stick into a numbered input, sends it, and applies it locally with the same moveKing()
+// the server uses. The server applies exactly one input per tick and reports the last one
+// it used ("ack") plus where the king ended up. On each snapshot we start from that
+// position and replay the inputs the server has not used yet. Any leftover difference is
+// faded out over ~100 ms instead of snapping, so the king never yanks back.
 
-import { UNITS, BUILDINGS, WORLD, pushOutOfBuildings } from '../sim/index.js';
+import { UNITS, BUILDINGS, WORLD, DT, moveKing } from '../sim/index.js';
 import {
   UNIT_KINDS, BUILDING_KINDS, UNIT_STRIDE, BUILDING_STRIDE, CRYSTAL_STRIDE,
   F_ATTACK, F_HIT, F_LEFT, F_RIGHT,
@@ -17,9 +24,12 @@ export function connect({ name, key, room, onReady, onClose }) {
   let myId = -1, seq = 0;
   let lastSnapAt = 0, interval = 1 / 15;
   let pending = [];
-  const sentIn = { x: 0, y: 0, at: 0 };
   const want = { x: 0, y: 0 };
-  const pred = { x: 0, y: 0, valid: false };
+  const pred = { x: 0, y: 0, px: 0, py: 0, valid: false, kingId: 0 }; // current and previous tick
+  const offset = { x: 0, y: 0 };    // visual correction still being faded out
+  const replay = { x: 0, y: 0 };
+  let inputs = [];                  // sent but not yet acknowledged: { s, x, y, m }
+  let inSeq = 0, acc = 0;
 
   const send = (msg) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
 
@@ -63,6 +73,8 @@ export function connect({ name, key, room, onReady, onClose }) {
     me.spawnedAt = msg.you.spawned;
     me.notice = msg.you.notice;
     me.hold = !!msg.you.hold;
+    me.boost = !!msg.you.boost;
+    net.botOrder = world.botOrder = msg.bo ? { order: msg.bo[0], target: msg.bo[1] } : null;
     const sh = world.shrine;
     sh.x = sh.y = world.size / 2;
     sh.owner = msg.sh[0]; sh.contender = msg.sh[1]; sh.progress = msg.sh[2] / 100;
@@ -122,34 +134,40 @@ export function connect({ name, key, room, onReady, onClose }) {
     if (msg.m) world.mini = msg.m;
     if (msg.e) for (const e of msg.e) pending.push(e);
 
-    // my own king: trust the server, but only pull the predicted position toward it
+    // my own king: server position + the inputs it has not seen yet
     const king = me.commanderId ? units.get(me.commanderId) : null;
-    if (!king) pred.valid = false;
+    if (!king) { pred.valid = false; inputs = []; }
     else {
-      const dx = king.sx - pred.x, dy = king.sy - pred.y;
-      if (!pred.valid || dx * dx + dy * dy > 170 * 170) { pred.x = king.sx; pred.y = king.sy; pred.valid = true; }
-      else {
-        const pull = want.x === 0 && want.y === 0 ? 0.35 : 0.1;
-        pred.x += dx * pull; pred.y += dy * pull;
+      while (inputs.length && inputs[0].s <= msg.you.ack) inputs.shift();
+      replay.x = msg.you.kx; replay.y = msg.you.ky;
+      for (const i of inputs) moveKing(replay, i.x, i.y, i.m, DT, world.buildings, world.size);
+      const dx = replay.x - pred.x, dy = replay.y - pred.y;
+      if (!pred.valid || pred.kingId !== king.id || dx * dx + dy * dy > 150 * 150) {
+        // new king, respawn or a real teleport: just go there
+        pred.x = pred.px = replay.x; pred.y = pred.py = replay.y;
+        offset.x = offset.y = 0;
+        pred.valid = true; pred.kingId = king.id;
+      } else if (dx !== 0 || dy !== 0) {
+        // shift the simulation, keep the picture where it was, and fade the difference out
+        pred.x += dx; pred.y += dy; pred.px += dx; pred.py += dy;
+        offset.x -= dx; offset.y -= dy;
       }
+      net.lastCorrection = Math.hypot(dx, dy);
     }
 
     if (!net.ready) { net.ready = true; onReady(net); }
   }
 
+  // Same rounding and normalising the server will apply, so prediction matches it exactly.
   net.setInput = (x, y) => {
+    x = +x.toFixed(3); y = +y.toFixed(3);
     const len = Math.hypot(x, y);
-    if (len > 1) { x /= len; y /= len; }
-    want.x = x; want.y = y;
-    const now = performance.now();
-    const changed = Math.abs(x - sentIn.x) + Math.abs(y - sentIn.y) > 0.04;
-    if ((changed && now - sentIn.at > 45) || now - sentIn.at > 400 || (changed && x === 0 && y === 0)) {
-      sentIn.x = x; sentIn.y = y; sentIn.at = now;
-      send({ t: 'in', x: +x.toFixed(3), y: +y.toFixed(3) });
-    }
+    if (!(len > 0.001)) { want.x = 0; want.y = 0; return; }
+    const k = len > 1 ? 1 / len : 1;
+    want.x = x * k; want.y = y * k;
   };
 
-  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind } });
+  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, target: cmd.target } });
 
   // Called every animation frame. Returns how far we are between the last two snapshots.
   net.frame = (dt) => {
@@ -157,13 +175,27 @@ export function connect({ name, key, room, onReady, onClose }) {
     const me = net.me;
     const king = me && me.commanderId ? units.get(me.commanderId) : null;
     if (king && pred.valid) {
-      const speed = UNITS.commander.speed, r = UNITS.commander.radius;
-      pred.x = Math.min(world.size - r, Math.max(r, pred.x + want.x * speed * dt));
-      pred.y = Math.min(world.size - r, Math.max(r, pred.y + want.y * speed * dt));
-      pushOutOfBuildings(world.buildings, pred.x, pred.y, r, pred); // same walls as the server
-      king.x = king.px = pred.x;
-      king.y = king.py = pred.y;
+      // one input per simulation tick, exactly like the server consumes them
+      acc += dt;
+      let n = 0;
+      while (acc >= DT && n < 5) {
+        const inp = { s: ++inSeq, x: want.x, y: want.y, m: me.boost ? WORLD.boost : 1 };
+        send({ t: 'in', s: inp.s, x: inp.x, y: inp.y });
+        inputs.push(inp);
+        if (inputs.length > 120) inputs.shift();
+        pred.px = pred.x; pred.py = pred.y;
+        moveKing(pred, inp.x, inp.y, inp.m, DT, world.buildings, world.size);
+        acc -= DT;
+        n++;
+      }
+      if (acc > DT) acc = 0;
+      const a = acc / DT, fade = Math.exp(-dt / 0.1);
+      offset.x *= fade; offset.y *= fade;
+      king.x = king.px = pred.px + (pred.x - pred.px) * a + offset.x;
+      king.y = king.py = pred.py + (pred.y - pred.py) * a + offset.y;
       if (want.x < -0.15) king.fx = -1; else if (want.x > 0.15) king.fx = 1;
+    } else {
+      acc = 0;
     }
     return lastSnapAt ? Math.min(1, (performance.now() - lastSnapAt) / 1000 / interval) : 1;
   };

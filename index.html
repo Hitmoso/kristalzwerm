@@ -10,11 +10,15 @@
   <canvas id="game"></canvas>
 
   <div id="hud" hidden>
+    <div id="leftcol">
     <div id="resources" class="panel">
       <div class="res"><span class="gem"></span><b id="gold">300</b><small id="income">+5/s</small></div>
       <div class="res"><span class="flag"></span><b id="supply">4/12</b><small id="queue"></small></div>
       <button id="room" class="chip" hidden></button>
       <div class="res" id="shieldRow" hidden><span class="shield"></span><b id="shield">1:30</b><small>schild — vervalt als je een kasteel aanvalt</small></div>
+    </div>
+
+    <div id="admin" class="panel" hidden></div>
     </div>
 
     <ol id="board" class="panel"></ol>

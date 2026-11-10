@@ -25,6 +25,7 @@ export const WORLD = {
   hqRegenRange: 320,
   hqRegenPerSec: 20,
   spawnGrace: 90,
+  boost: 3.5,          // admin speed multiplier for the king
   shrineRadius: 170,   // the Kristalhart in the middle of the map
   shrineCapture: 5,    // seconds a king must stand there alone
   shrineIncome: 6,     // gold per second for whoever holds it

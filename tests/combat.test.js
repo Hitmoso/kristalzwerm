@@ -245,3 +245,41 @@ test('hold stance keeps the army at the castle', () => {
     if (u.owner === a.id && u !== c) assert.ok(Math.hypot(u.x - c.x, u.y - c.y) < 160);
   }
 });
+
+test('admin boost makes the king 3.5 times as fast, and only for admins', () => {
+  const { world, a, ca } = stage();
+  setInput(world, a.id, 1, 0);
+  queueCommand(world, a.id, { type: 'boost' });
+  let x = ca.x; run(world, 1);
+  assert.ok(Math.abs(ca.x - x - 190) < 8, 'no admin, no boost');
+  a.admin = true;
+  queueCommand(world, a.id, { type: 'boost' });
+  step(world);
+  x = ca.x; run(world, 1);
+  assert.ok(Math.abs(ca.x - x - 190 * WORLD.boost) < 20, `moved ${ca.x - x}`);
+});
+
+test('bots obey an admin order and drop it when the target falls', () => {
+  const world = createWorld({ seed: 21 });
+  const me = addPlayer(world, { name: 'Ik' });
+  const bots = [0, 1, 2].map(() => addPlayer(world, { isBot: true, difficulty: 'normal' }));
+  queueCommand(world, bots[0].id, { type: 'order', order: 'center' });
+  step(world);
+  assert.equal(world.botOrder, null, 'only admins may order');
+  me.admin = true;
+  queueCommand(world, me.id, { type: 'order', order: 'attack', target: 99 });
+  queueCommand(world, me.id, { type: 'order', order: 'dance' });
+  step(world);
+  assert.equal(world.botOrder, null, 'bad orders are ignored');
+  queueCommand(world, me.id, { type: 'order', order: 'center' });
+  run(world, 3);
+  for (const b of bots) assert.equal(b.bot.goal, 'capture');
+  queueCommand(world, me.id, { type: 'order', order: 'attack', target: bots[2].id });
+  run(world, 3);
+  assert.equal(bots[0].bot.goal, 'attack');
+  assert.equal(bots[0].bot.targetPlayer, bots[2].id);
+  assert.equal(bots[2].bot.goal, 'defend', 'the target defends itself');
+  findById(world.buildings, bots[2].hqId).hp = 0;
+  step(world);
+  assert.equal(world.botOrder, null);
+});

@@ -3,13 +3,14 @@
 import { DT, WORLD, UNITS, BUILDINGS } from './config.js';
 import { buildGrid, queryGrid } from './grid.js';
 import {
-  playerStats, buildingCost, resetPlayer, spawnUnit, spawnBuilding, spawnCrystal, pushOutOfBuildings,
+  playerStats, buildingCost, resetPlayer, spawnUnit, spawnBuilding, spawnCrystal, pushOutOfBuildings, moveKing,
 } from './world.js';
 import { updateBot } from './bot.js';
 
 const GRID_CELL = 120;
 const FOLLOW_SPEED = 215;
 const BUILD_KINDS = { mine: 1, barracks: 1, tower: 1, academy: 1 };
+const BOT_ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 
 export function step(world, dt = DT) {
   world.events.length = 0;
@@ -56,6 +57,13 @@ export function step(world, dt = DT) {
   collectCrystals(ctx);
   cleanup(ctx);
 
+  // An attack order ends when its target is gone.
+  const ord = world.botOrder;
+  if (ord && ord.order === 'attack' && !(world.players[ord.target] && world.players[ord.target].alive)) {
+    world.botOrder = null;
+    world.events.push({ type: 'order', player: ord.by, order: 'free', target: -1, reason: 'done' });
+  }
+
   if (world.crystals.length < WORLD.crystalCount) {
     world.crystalTimer += dt;
     if (world.crystalTimer >= WORLD.crystalRespawn) {
@@ -92,6 +100,25 @@ function applyCommand(ctx, p, st, cmd) {
   if (cmd.type === 'stance') {
     p.hold = !p.hold;
     world.events.push({ type: 'stance', player: p.id, hold: p.hold });
+    return;
+  }
+  if (cmd.type === 'boost') {
+    if (!world.cheats && !p.admin) return;
+    p.boost = !p.boost;
+    world.events.push({ type: 'boost', player: p.id, on: p.boost });
+    return;
+  }
+  if (cmd.type === 'order') {
+    // Admin: tell every bot what to do. 'free' hands them back their own minds.
+    if (!world.cheats && !p.admin) return;
+    if (!BOT_ORDERS[cmd.order]) return;
+    if (cmd.order === 'free') world.botOrder = null;
+    else {
+      const t = world.players[cmd.target];
+      if (cmd.order === 'attack' && (!t || !t.alive)) return;
+      world.botOrder = { order: cmd.order, target: cmd.order === 'attack' ? t.id : -1, by: p.id };
+    }
+    world.events.push({ type: 'order', player: p.id, order: cmd.order, target: world.botOrder ? world.botOrder.target : -1 });
     return;
   }
   if (cmd.type === 'cheat') {
@@ -215,7 +242,7 @@ function dealDamage(ctx, attacker, target, amount, quiet) {
   } else if (ranged) {
     world.events.push({ type: 'shot', kind: attacker.kind, x1: attacker.x, y1: attacker.y, x2: target.x, y2: target.y, owner: attacker.owner });
   } else {
-    world.events.push({ type: 'hit', x: target.x, y: target.y, owner: attacker.owner });
+    world.events.push({ type: 'hit', kind: attacker.kind, x: target.x, y: target.y, owner: attacker.owner });
   }
   if (target.hp <= 0) {
     const killer = world.players[attacker.owner];
@@ -392,6 +419,12 @@ function updateUnits(ctx) {
           u.fy = dy / d;
         }
       }
+    }
+
+    if (u.kind === 'commander') {
+      // Kings are not shoved by units (they still push others aside), so the client can predict them exactly.
+      moveKing(u, p.input.mx, p.input.my, p.boost ? WORLD.boost : 1, dt, world.buildings, world.size);
+      continue;
     }
 
     // Separation: push overlapping units apart.
