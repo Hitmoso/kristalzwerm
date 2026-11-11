@@ -603,3 +603,19 @@ test('admin: make every bot strong with gold or a ready army; humans get nothing
   run(world, 1);
   for (const u of world.units) assert.ok(Number.isFinite(u.x) && Number.isFinite(u.y));
 });
+
+test('a player can have at most three dragons, counting the ones on the way', () => {
+  const world = createWorld({ seed: 17 });
+  world.crystals.length = 0; world.crystalTimer = -1e9; world.caravanTimer = 1e9;
+  const p = addPlayer(world, { name: 'Drakenhoeder' });
+  const hq = findById(world.buildings, p.hqId);
+  spawnBuilding(world, p.id, 'academy', hq.x + 200, hq.y + 150);
+  for (let i = 0; i < 4; i++) spawnBuilding(world, p.id, 'barracks', hq.x - 300 + i * 80, hq.y + 300);
+  p.gold = 10000;
+  spawnUnit(world, p.id, 'dragon', hq.x, hq.y + 200);
+  for (let i = 0; i < 4; i++) queueCommand(world, p.id, { type: 'train', kind: 'dragon' });
+  step(world);
+  assert.equal(p.notice.code, 'max');
+  run(world, 40);
+  assert.equal(world.units.filter((u) => u.owner === p.id && u.kind === 'dragon').length, UNITS.dragon.max);
+});

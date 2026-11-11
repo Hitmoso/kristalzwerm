@@ -63,19 +63,21 @@ export const UNITS = {
   soldier: { hp: 60, dmg: 8, range: 8, cd: 0.6, speed: 150, radius: 8, supply: 1, cost: 30, train: 2 },
   archer: { hp: 35, dmg: 10, range: 170, cd: 1.0, speed: 140, radius: 7, supply: 1, cost: 45, train: 3, needs: 'barracks' },
   // Fast cavalry. The first blow after 3 quiet seconds is a charge.
-  knight: { hp: 140, dmg: 15, range: 10, cd: 0.8, speed: 200, radius: 11, supply: 2, cost: 80, train: 4, needs: 'barracks', charge: 2.5 },
+  knight: { hp: 220, dmg: 26, range: 10, cd: 0.8, speed: 200, radius: 11, supply: 2, cost: 100, train: 4, needs: 'barracks', charge: 2.5 },
   // Slow wall-breaker.
-  giant: { hp: 340, dmg: 30, range: 12, cd: 1.2, speed: 95, radius: 16, supply: 3, cost: 130, train: 6, needs: 'barracks', buildingMult: 2.5 },
+  // Elite: a wide club swing that hits a few troops at once.
+  giant: { hp: 620, dmg: 42, range: 12, cd: 1.2, speed: 95, radius: 18, supply: 3, cost: 260, train: 8, needs: 'barracks', buildingMult: 2.5, splash: 14 },
   // Siege crossbow on wheels: slow and fragile up close, but its bolts tear dragons apart.
-  ballista: { hp: 150, dmg: 12, range: 230, cd: 1.4, speed: 110, radius: 13, supply: 2, cost: 100, train: 5, needs: 'barracks', airMult: 3.5 },
+  ballista: { hp: 190, dmg: 15, range: 230, cd: 1.4, speed: 110, radius: 13, supply: 2, cost: 140, train: 5, needs: 'barracks', airMult: 4 },
   // The gold caravan's cart: neutral, unarmed, tough, never trainable.
   caravan: { hp: 1700, dmg: 0, range: 0, cd: 1, speed: 70, radius: 24, supply: 0, cost: 300, train: 0, neutral: true },
   // Fireball hits everything near the target.
-  mage: { hp: 45, dmg: 13, range: 180, cd: 1.5, speed: 130, radius: 8, supply: 2, cost: 95, train: 4.5, needs: 'academy', splash: 55 },
+  mage: { hp: 60, dmg: 16, range: 180, cd: 1.5, speed: 130, radius: 8, supply: 2, cost: 160, train: 5, needs: 'academy', splash: 60 },
   // Does not fight; mends the most wounded ally nearby.
-  healer: { hp: 55, dmg: 0, heal: 14, range: 150, cd: 0.8, speed: 145, radius: 8, supply: 1, cost: 70, train: 4, needs: 'academy' },
+  healer: { hp: 55, dmg: 0, heal: 18, range: 150, cd: 0.8, speed: 145, radius: 8, supply: 1, cost: 100, train: 4, needs: 'academy' },
   // Flies over buildings and breathes fire in a small area. Only ranged attacks reach it.
-  dragon: { hp: 260, dmg: 13, range: 95, cd: 0.7, speed: 165, radius: 15, supply: 4, cost: 240, train: 9, needs: 'academy', splash: 45, flying: true },
+  // Elite: expensive, slow to train, at most MAX_DRAGONS per player, and worth a whole squad.
+  dragon: { hp: 480, dmg: 15, range: 95, cd: 0.7, speed: 165, radius: 18, supply: 5, cost: 500, train: 14, needs: 'academy', splash: 40, flying: true, max: 3 },
 };
 
 export const BUILDINGS = {
@@ -112,7 +114,7 @@ export const BOT_NAMES = ['Vos', 'Raaf', 'Otter', 'Wezel', 'Havik', 'Das', 'Lynx
 export const SPECS = {
   soldier: {
     cost: 350,
-    a: { id: 'spear', name: 'Speerdrager', desc: 'Dubbele schade tegen ridders en reuzen', mods: { bigMult: 2.2 } },
+    a: { id: 'spear', name: 'Speerdrager', desc: 'Dubbele schade tegen ridders en reuzen', mods: { bigMult: 2.8 } },
     b: { id: 'shield', name: 'Schilddrager', desc: 'Halve schade van pijlen en schoten, iets trager', mods: { hp: 75, rangedResist: 0.5, speed: 135 } },
   },
   archer: {
@@ -122,33 +124,33 @@ export const SPECS = {
   },
   knight: {
     cost: 450,
-    a: { id: 'heavy', name: 'Zware ridder', desc: '50% meer levens en een hardere stormloop, trager', mods: { hp: 210, charge: 3.2, speed: 170 } },
+    a: { id: 'heavy', name: 'Zware ridder', desc: '50% meer levens en een hardere stormloop, trager', mods: { hp: 330, charge: 3.2, speed: 170 } },
     b: { id: 'light', name: 'Lichte ruiter', desc: 'Sneller, en elke derde klap is een stormloop', mods: { speed: 245, chargeEvery: 3 } },
   },
   giant: {
     cost: 520,
-    a: { id: 'siege', name: 'Belegeraar', desc: 'Sloopt gebouwen veel sneller, zwakker tegen troepen', mods: { buildingMult: 4.5, dmg: 24 } },
-    b: { id: 'brute', name: 'Bruut', desc: 'Elke klap raakt alles om hem heen', mods: { splash: 32, hp: 360, dmg: 27 } },
+    a: { id: 'siege', name: 'Belegeraar', desc: 'Sloopt gebouwen veel sneller, zwakker tegen troepen', mods: { buildingMult: 4.5, dmg: 42, splash: 0 } },
+    b: { id: 'brute', name: 'Bruut', desc: 'Elke klap raakt alles om hem heen', mods: { splash: 30, hp: 650, dmg: 44 } },
   },
   ballista: {
     cost: 450,
-    a: { id: 'slayer', name: 'Drakendoder', desc: 'Nog meer schade op draken en verder bereik', mods: { airMult: 5, range: 270 } },
-    b: { id: 'grape', name: 'Schroot', desc: 'Raakt een hele groep grondtroepen', mods: { splash: 60, dmg: 14, airMult: 2 } },
+    a: { id: 'slayer', name: 'Drakendoder', desc: 'Nog meer schade op draken en verder bereik', mods: { airMult: 5.5, range: 270 } },
+    b: { id: 'grape', name: 'Schroot', desc: 'Raakt een hele groep grondtroepen', mods: { splash: 60, dmg: 17, airMult: 2 } },
   },
   mage: {
     cost: 520,
-    a: { id: 'firemage', name: 'Vuurmagiër', desc: 'Grotere explosie en meer schade', mods: { splash: 85, dmg: 15 } },
-    b: { id: 'icemage', name: 'IJsmagiër', desc: 'Vertraagt vijanden 2 seconden, iets minder schade', mods: { dmg: 10, slow: 2 } },
+    a: { id: 'firemage', name: 'Vuurmagiër', desc: 'Grotere explosie en meer schade', mods: { splash: 90, dmg: 19 } },
+    b: { id: 'icemage', name: 'IJsmagiër', desc: 'Vertraagt vijanden 2 seconden, iets minder schade', mods: { dmg: 12, slow: 2 } },
   },
   healer: {
     cost: 450,
-    a: { id: 'priest', name: 'Priester', desc: 'Geneest twee troepen tegelijk', mods: { healTargets: 2, heal: 10 } },
-    b: { id: 'herbal', name: 'Kruidenvrouw', desc: 'Geneest langzaam iedereen om zich heen', mods: { aura: 175, heal: 8, cd: 1 } },
+    a: { id: 'priest', name: 'Priester', desc: 'Geneest twee troepen tegelijk', mods: { healTargets: 2, heal: 13 } },
+    b: { id: 'herbal', name: 'Kruidenvrouw', desc: 'Geneest langzaam iedereen om zich heen', mods: { aura: 175, heal: 10, cd: 1 } },
   },
   dragon: {
     cost: 700,
-    a: { id: 'firedragon', name: 'Vuurdraak', desc: 'Wat hij raakt, brandt nog 3 seconden door', mods: { burn: 3, burnDps: 8 } },
-    b: { id: 'armordragon', name: 'Pantserdraak', desc: 'Meer levens en halve schade van ballisten', mods: { hp: 340, ballistaResist: 0.5 } },
+    a: { id: 'firedragon', name: 'Vuurdraak', desc: 'Wat hij raakt, brandt nog 3 seconden door', mods: { burn: 3, burnDps: 10 } },
+    b: { id: 'armordragon', name: 'Pantserdraak', desc: 'Meer levens en halve schade van ballisten', mods: { hp: 620, ballistaResist: 0.5 } },
   },
 };
 

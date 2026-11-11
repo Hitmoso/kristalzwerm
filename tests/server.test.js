@@ -206,6 +206,7 @@ test('online: an admin can strengthen the bots, a guest cannot', async (t) => {
   t.after(() => { game.leave(boss.c); game.leave(guest.c); });
   await wait(150);
   const w = game.room.world;
+  for (const p of w.players) if (p.isBot && p.bot) { p.bot.ready = true; p.bot.think = 1e9; } // bots must not spend it during the test
   const botGold = () => w.players.filter((p) => p.isBot && p.alive && !p.left).reduce((s, p) => s + p.gold, 0);
   const g0 = botGold();
   game.receive(guest.c, { t: 'cmd', c: { type: 'empower', what: 'gold' } });

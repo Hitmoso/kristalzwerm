@@ -19,7 +19,8 @@ export const COLORS = [
 export const NEUTRAL_COLOR = { main: '#c8b48a', dark: '#7a5a2e', light: '#f6ecd2' };
 export const colorOf = (owner) => (owner < 0 ? NEUTRAL_COLOR : COLORS[owner % COLORS.length]);
 
-const VIEW_HEIGHT = 860; // world units visible vertically
+const VIEW_HEIGHT = 860;
+const SCALE = { giant: 1.2, dragon: 1.3 }; // elite troops stand out // world units visible vertically
 const MINIMAP = 176;
 const TAU = Math.PI * 2;
 const DECO_CELL = 230;
@@ -276,8 +277,9 @@ export function createRenderer(canvas) {
           g.strokeStyle = 'rgba(200, 240, 255, 0.9)'; g.lineWidth = 2.5;
           g.beginPath(); g.ellipse(it.x, it.uy, def.radius + 6, (def.radius + 6) * 0.45, 0, 0, TAU); g.stroke();
         }
-        g.drawImage(s.cv, it.x + s.dx, it.uy + s.dy, s.w, s.h);
-        if (u.slowUntil > time) snowflake(g, it.x + def.radius, it.uy + s.dy + 6, 4);
+        const sc = SCALE[u.kind] || 1; // elite troops are drawn bigger
+        g.drawImage(s.cv, it.x + s.dx * sc, it.uy + s.dy * sc, s.w * sc, s.h * sc);
+        if (u.slowUntil > time) snowflake(g, it.x + def.radius, it.uy + s.dy * sc + 6, 4);
         if (u.burnUntil > time) { // flickering fire on a burning unit
           const fl = 1 + 0.25 * Math.sin(r.frame * 0.6 + u.id);
           g.fillStyle = 'rgba(255, 140, 40, 0.85)';
@@ -285,7 +287,7 @@ export function createRenderer(canvas) {
           g.fillStyle = 'rgba(255, 230, 120, 0.9)';
           g.beginPath(); g.ellipse(it.x + 3, it.uy + s.dy + 12, 2.2 * fl, 4 * fl, 0, 0, TAU); g.fill();
         }
-        const top = it.uy + s.dy + (u.kind === 'commander' ? 0 : 4);
+        const top = it.uy + s.dy * sc + (u.kind === 'commander' ? 0 : 4);
         if (u.hp < u.maxHp) bar(g, it.x, top - 3, def.radius * 2 + 6, u.hp / u.maxHp, 3.5, null);
         if (u.kind === 'caravan') {
           if (u.hp >= u.maxHp) bar(g, it.x, top - 3, def.radius * 2 + 6, 1, 3.5, null);

@@ -1,6 +1,6 @@
 // DOM HUD: resources, action buttons, scoreboard, messages, tips.
 
-import { UNITS, BUILDINGS, WORLD, SPECS, playerStats, buildingCost } from '../sim/index.js';
+import { UNITS, BUILDINGS, WORLD, SPECS, playerStats, buildingCost, countOwned } from '../sim/index.js';
 import { colorOf } from './render.js';
 import { iconUrl } from './sprites.js';
 
@@ -22,7 +22,7 @@ const TRAIN = [
   ['ballista', 'Balliste', 'T', 'Schiet ver; 3,5× schade op draken'],
   ['mage', 'Magiër', 'Z', 'Vuurbal raakt een hele groep'],
   ['healer', 'Genezer', 'X', 'Geneest gewonde troepen'],
-  ['dragon', 'Draak', 'C', 'Vliegt; alleen afstandstroepen raken hem'],
+  ['dragon', 'Draak', 'C', 'Elite: vliegt, alleen afstandstroepen raken hem; maximaal 3'],
 ];
 const NEEDS = { barracks: 'Kazerne', academy: 'Academie' };
 const NOTICES = {
@@ -37,6 +37,7 @@ const NOTICES = {
   targetShield: 'Dat kasteel heeft nog een schild',
   forge: 'Bouw eerst een Smidse (5)',
   specDone: 'Die troep is al gespecialiseerd',
+  max: 'Je hebt al het maximum aantal draken (3)',
 };
 
 export function createHud(onAction) {
@@ -161,6 +162,7 @@ export function createHud(onAction) {
         cost = def.cost;
         if (def.needs && !st[def.needs]) locked = NEEDS[def.needs];
         full = st.supply + def.supply > st.cap;
+        if (def.max && countOwned(world, me, kind) >= def.max) locked = `max ${def.max}`;
       }
       b.lastElementChild.textContent = locked || (full ? 'vol' : cost);
       const star = b.querySelector('.star');

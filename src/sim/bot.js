@@ -11,6 +11,7 @@ import { DIFFICULTY, UNITS, BUILDINGS, WORLD, CARAVAN, SPECS } from './config.js
 const RAID_POWER = 850; // army value a bot wants before taking on a caravan escort
 import { rand, randRange } from './rng.js';
 import { playerStats, buildingCost, queueCommand, setInput, findById } from './world.js';
+import { countOwned } from './step.js';
 
 // Each bot gets a temperament for life; it colours every decision a little.
 const PERSONAS = {
@@ -282,7 +283,9 @@ function think(world, p, st, diff, king, hq) {
     const army = { count, healers, mages, enemyDragons, enemyBallistas, ballistas };
     for (let i = 0; i < 3; i++) {
       let kind = pickUnit(world, st, persona, army);
-      if (gold < UNITS[kind].cost && gold >= UNITS.soldier.cost && rand(world) < 0.5) kind = 'soldier';
+      if (UNITS[kind].max && countOwned(world, p, kind) >= UNITS[kind].max) kind = 'knight'; // dragons are capped
+      // cheap troops: fill in with soldiers when short; elite: keep the gold and save up
+      if (gold < UNITS[kind].cost && UNITS[kind].cost < 250 && gold >= UNITS.soldier.cost && rand(world) < 0.5) kind = 'soldier';
       const def = UNITS[kind];
       if (gold < def.cost || supply + def.supply > target) break;
       queueCommand(world, p.id, { type: 'train', kind });

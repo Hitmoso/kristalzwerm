@@ -50,7 +50,7 @@ test('buying a specialisation needs a Smidse and gold, works once, and upgrades 
   const { world, a } = arena();
   const ka = findById(world.units, a.commanderId);
   const knights = [0, 1].map((i) => spawnUnit(world, a.id, 'knight', ka.x + 40 + i * 25, ka.y));
-  knights[0].hp = 70; // half health
+  knights[0].hp = knights[0].maxHp / 2; // half health
   a.gold = 1000;
   queueCommand(world, a.id, { type: 'spec', kind: 'knight', choice: 'a' });
   step(world);

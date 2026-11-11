@@ -222,6 +222,7 @@ function applyCommand(ctx, p, st, cmd) {
     const def = UNITS[cmd.kind];
     if (!def || cmd.kind === 'commander' || def.neutral) return;
     if (def.needs && !st[def.needs]) return notice(world, p, def.needs);
+    if (def.max && countOwned(world, p, cmd.kind) >= def.max) return notice(world, p, 'max');
     if (p.gold < def.cost) return notice(world, p, 'gold');
     if (st.supply + def.supply > st.cap) return notice(world, p, 'supply');
     p.gold -= def.cost;
@@ -263,6 +264,15 @@ function applyCommand(ctx, p, st, cmd) {
     st.income += def.income || 0;
     world.events.push({ type: 'built', x, y, kind: cmd.kind, owner: p.id });
   }
+}
+
+// Units of one kind a player has or has on the way (queued or being trained).
+export function countOwned(world, p, kind) {
+  let n = 0;
+  for (const u of world.units) if (u.owner === p.id && u.kind === kind) n++;
+  for (const b of world.buildings) if (b.owner === p.id && b.train && b.train.kind === kind) n++;
+  for (const k of p.queue) if (k === kind) n++;
+  return n;
 }
 
 function production(ctx) {
@@ -318,6 +328,16 @@ function nearestEnemy(ctx, x, y, range, owner, withBuildings, air = true) {
       if (d < bestD) { bestD = d; best = b; }
     }
   }
+  return best;
+}
+
+function nearestFlyer(ctx, x, y, range, owner) {
+  let best = null, bestD = range;
+  queryGrid(ctx.grid, x, y, range + 20, (o) => {
+    if (o.owner === owner || o.hp <= 0 || !UNITS[o.kind].flying) return;
+    const d = Math.hypot(o.x - x, o.y - y) - UNITS[o.kind].radius;
+    if (d < bestD) { bestD = d; best = o; }
+  });
   return best;
 }
 
@@ -716,7 +736,9 @@ function updateUnits(ctx) {
         target = u.targetId ? ctx.byId.get(u.targetId) : null;
         if (target && (target.hp <= 0 || (!air && UNITS[target.kind] && UNITS[target.kind].flying))) target = null;
         if (!target || (world.tick + u.id) % 4 === 0) {
-          target = nearestEnemy(ctx, u.x, u.y, WORLD.aggroRange, u.owner, true, air);
+          // anti-air (ballistas) go for anything flying in reach before anything else
+          const flyer = def.airMult ? nearestFlyer(ctx, u.x, u.y, WORLD.aggroRange, u.owner) : null;
+          target = flyer || nearestEnemy(ctx, u.x, u.y, WORLD.aggroRange, u.owner, true, air);
         }
         u.targetId = target ? target.id : 0;
       }
