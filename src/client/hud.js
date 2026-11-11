@@ -87,7 +87,7 @@ export function createHud(onAction) {
     const foes = world.players.filter((p) => p && !p.left && p.alive && p.id !== me.id).sort((a, b) => b.score - a.score);
     const html = '<p>Val het kasteel aan van</p>' + (foes.length ? foes.map((p) => {
       const shield = p.shieldUntil > world.time;
-      return `<button data-t="${p.id}" class="${shield ? 'off' : ''}${me.army === 'attack' && me.armyTarget === p.id ? ' on' : ''}"><i style="background:${colorOf(p.id).main}"></i>${esc(p.name)}<small>${shield ? 'schild' : Math.floor(p.score)}</small></button>`;
+      return `<button data-t="${p.id}" class="${shield ? 'off' : ''}${me.army === 'attack' && me.armyTarget === p.id ? ' on' : ''}"><i style="background:${colorOf(p.id).main}"></i>${esc(p.name)}<small>${me.revenge === p.id ? (shield ? 'wraak · schild' : 'wraak') : shield ? 'schild' : Math.floor(p.score)}</small></button>`;
     }).join('') : '<p>Geen tegenstanders</p>');
     if (html !== lastMenu) { el.attackMenu.innerHTML = html; lastMenu = html; }
   }
@@ -131,7 +131,7 @@ export function createHud(onAction) {
     // scoreboard
     const rows = world.players.filter((p) => p && !p.left).sort((a, b) => b.score - a.score);
     const html = rows.map((p) =>
-      `<li class="${p.id === me.id ? 'me' : ''}${p.alive ? '' : ' out'}"><i style="background:${colorOf(p.id).main}"></i><span>${p.id === me.id ? 'Jij' : esc(p.name)}</span><b>${Math.floor(p.score)}</b></li>`
+      `<li class="${p.id === me.id ? 'me' : ''}${p.alive ? '' : ' out'}"><i style="background:${colorOf(p.id).main}"></i><span>${p.id === world.leader ? '<em class="crown">♛</em> ' : ''}${p.id === me.id ? 'Jij' : esc(p.name)}</span><b>${Math.floor(p.score)}</b></li>`
     ).join('');
     if (html !== lastBoard) { el.board.innerHTML = html; lastBoard = html; }
 

@@ -150,3 +150,25 @@ test('pages without a version still play but never see neutral units; other vers
   assert.equal(game.join((m) => inbox.push(m), { v: 1, name: 'Ander' }), null);
   assert.equal(inbox[0].t, 'old');
 });
+
+test('online: the summary, inheritance, revenge choice and crown reach the player', async (t) => {
+  const game = createRoom({});
+  const a = fakeClient(game, { name: 'Anna' }), b = fakeClient(game, { name: 'Bram' });
+  t.after(() => { game.leave(a.c); game.leave(b.c); });
+  await wait(200);
+  const w = game.room.world;
+  const pa = w.players[a.c.playerId], pb = w.players[b.c.playerId];
+  pa.score = 2000;
+  await wait(150);
+  assert.equal(a.snaps().at(-1).ld, pa.id, 'the crown is in the snapshot');
+  const hq = w.buildings.find((x) => x.id === pa.hqId);
+  hq.hp = 0; hq.hitBy = pb.id;
+  await wait(200);
+  const ev = a.snaps().flatMap((s) => s.e || []).find((e) => e.type === 'eliminated' && e.player === pa.id);
+  assert.ok(ev && ev.sum && ev.sum.inherit === 200, 'summary with inheritance');
+  game.receive(a.c, { t: 'cmd', c: { type: 'respawn', revenge: true } });
+  await wait(200);
+  const you = a.snaps().at(-1).you;
+  assert.equal(you.rv, pb.id);
+  assert.equal(you.inh, 200);
+});

@@ -3,7 +3,7 @@
 //   local    you against bots, simulated in this browser
 //   online   the server simulates; we mirror and draw
 
-import { createWorld, addPlayer, queueCommand, setInput, step, findById, DT, BOT_NAMES } from '../sim/index.js';
+import { createWorld, addPlayer, queueCommand, setInput, step, findById, DT, BOT_NAMES, WORLD } from '../sim/index.js';
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { createHud } from './hud.js';
@@ -148,16 +148,17 @@ function startOnline() {
   });
 }
 
-function respawn() {
+function respawn(revenge = false) {
   if (!game.playing || game.me.alive) return;
-  act({ type: 'respawn' });
+  act({ type: 'respawn', revenge });
   deadEl.hidden = true;
 }
 
 try { nameEl.value = localStorage.getItem('kz-name') || ''; } catch { /* private window */ }
 playBtn.addEventListener('click', startOnline);
 $('practice').addEventListener('click', startLocal);
-$('again').addEventListener('click', respawn);
+$('again').addEventListener('click', () => respawn(false));
+$('revengeBtn').addEventListener('click', () => respawn(true));
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && !startEl.hidden) { startOnline(); return; }
   if ((e.code === 'Enter' || e.code === 'Space') && !deadEl.hidden) respawn();
@@ -186,10 +187,44 @@ function handleEvents(world, me) {
     if (e.type === 'eliminated' && e.player === me.id) {
       const by = e.by >= 0 && world.players[e.by] ? world.players[e.by].name : 'een onbekende';
       deadText.textContent = `Gesloopt door ${by}. Eindscore: ${e.score}.`;
+      showSummary(e, world, me);
       setTimeout(() => { if (game.playing && !game.me.alive) deadEl.hidden = false; }, 900);
     }
-    if (e.type === 'spawned' && e.player === me.id) lookAtKing();
+    if (e.type === 'spawned' && e.player === me.id) {
+      lookAtKing();
+      if (me.inherited > 0) hud.say(`Erfenis: +${me.inherited} goud`);
+    }
+    if (e.type === 'revenge') {
+      const t = world.players[e.target], who = world.players[e.player];
+      if (e.player === me.id) {
+        if (e.phase === 'sworn') hud.say(`Wraak op ${t ? t.name : '?'}: sloop zijn kasteel voor +${WORLD.revengeBonus} goud`);
+        else if (e.phase === 'done') hud.say(`Wraak genomen op ${t ? t.name : '?'}! +${e.gold} goud`);
+        else if (e.phase === 'lost') hud.say(`${t ? t.name : '?'} is al door een ander verslagen — je wraak vervalt`, true);
+      } else if (e.target === me.id && e.phase === 'sworn') {
+        hud.say(`${who ? who.name : '?'} zint op wraak tegen jou`, true);
+      }
+    }
+    if (e.type === 'crown') {
+      const who = world.players[e.player];
+      hud.say(e.player === me.id ? 'Jij draagt nu de kroon — iedereen jaagt op je' : `${who ? who.name : '?'} draagt nu de kroon`);
+    }
   }
+}
+
+// The summary screen: what this life was worth, what the next one starts with, and a way back at the killer.
+function showSummary(e, world, me) {
+  const s = e.sum || {};
+  const mins = Math.floor((s.seconds || 0) / 60), secs = String((s.seconds || 0) % 60).padStart(2, '0');
+  const cells = [
+    ['Overleefd', `${mins}:${secs}`], ['Verslagen', s.kills || 0], ['Gesloopt', s.buildings || 0],
+    ['Grootste leger', s.peakArmy || 0], ['Kristallen', s.crystals || 0], ['Karavanen', s.caravans || 0],
+  ];
+  $('deadStats').innerHTML = cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  $('deadInherit').textContent = s.inherit > 0 ? `Erfenis: je begint opnieuw met ${s.inherit} goud extra` : '';
+  const killer = world.players[e.by];
+  const btn = $('revengeBtn');
+  btn.hidden = !(killer && killer.id !== me.id && killer.alive && !killer.left);
+  if (!btn.hidden) btn.textContent = `Wraak op ${killer.name} (+${WORLD.revengeBonus} goud)`;
 }
 
 function steer() {

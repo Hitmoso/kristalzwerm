@@ -19,7 +19,7 @@ const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
 const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 const INPUT_QUEUE = 10;  // inputs buffered per client; older ones are dropped
 const MAX_DEBT = 8;      // ticks of late input we are willing to catch up on
-const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1, caravan: 1 };
+const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1, caravan: 1, revenge: 1, crown: 1 };
 
 export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
   const room = { world: null, clients: new Set(), timer: null, snapCount: 0 };
@@ -176,11 +176,12 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       you: {
         gold: Math.floor(me.gold), q: me.queue.length, cresp: +me.commanderRespawn.toFixed(1),
         spawned: +me.spawnedAt.toFixed(2), notice: me.notice, st, army: [me.army, me.armyTarget], hold: me.army === 'hold' ? 1 : 0,
-        ack: c.ack, boost: me.boost ? 1 : 0, kx: king ? king.x : 0, ky: king ? king.y : 0,
+        ack: c.ack, boost: me.boost ? 1 : 0, rv: me.revenge, inh: me.inherited, kx: king ? king.x : 0, ky: king ? king.y : 0,
       },
       p: shared.p, b: shared.b, u,
       sh: [world.shrine.owner, world.shrine.contender, Math.round(world.shrine.progress * 100)],
       bo: world.botOrder ? [world.botOrder.order, world.botOrder.target] : null,
+      ld: world.leader,
       // the caravan is on everyone's minimap, wherever it is: x, y, end x, end y, state (1 rolling, 2 looted)
       cv: world.caravan ? [Math.round(world.caravan.x), Math.round(world.caravan.y), Math.round(world.caravan.ex), Math.round(world.caravan.ey), world.caravan.state === 'rolling' ? 1 : 2] : null,
     };
@@ -249,6 +250,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
         queueCommand(room.world, c.playerId, { type, order, target });
         return;
       }
+      if (type === 'respawn') { queueCommand(room.world, c.playerId, { type, revenge: msg.c.revenge === true }); return; }
       queueCommand(room.world, c.playerId, { type, kind });
     }
   }

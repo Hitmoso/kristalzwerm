@@ -221,6 +221,20 @@ kbd {
 .secondary:hover { background: rgba(120, 90, 40, 0.1); }
 .primary:disabled { filter: grayscale(0.6); cursor: wait; }
 .status { margin: 12px 0 0; font-weight: 700; color: #a3261d; }
+#deadStats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 14px;
+}
+#deadStats div { background: rgba(122, 82, 0, 0.08); border: 2px solid rgba(42, 26, 16, 0.15); border-radius: 10px; padding: 7px 4px; }
+#deadStats dt { font-size: 11px; color: #6f5a42; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+#deadStats dd { margin: 2px 0 0; font-size: 20px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+#deadInherit { margin: 0 0 14px; font-weight: 700; color: #7a5200; }
+#deadInherit:empty { display: none; }
+.primary.revenge {
+  margin-bottom: 10px; background: linear-gradient(#ff8a7a, #e0483a); color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: 0 5px 0 #8e2117, 0 5px 0 3px var(--ink);
+}
+.primary.revenge:active { box-shadow: 0 1px 0 #8e2117, 0 1px 0 3px var(--ink); }
+#board li .crown { color: var(--gold); font-style: normal; font-size: 13px; }
 .fine { margin: 16px 0 0; font-size: 12.5px; color: #6f5a42; }
 
 @media (max-width: 900px) {

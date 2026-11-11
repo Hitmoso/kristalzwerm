@@ -26,6 +26,14 @@ Met de knoppen **Volgen**, **Kasteel** en **Aanval** onderaan stuur je je leger:
 | Aanval-knop | leger naar het kasteel van een tegenstander sturen |
 | M | geluid aan/uit |
 
+## Na een val
+
+Verlies je je kasteel, dan zie je wat je dat leven hebt bereikt: hoe lang je overleefde, hoeveel je versloeg en sloopte, je grootste leger, kristallen en karavanen.
+
+- **Erfenis:** je begint opnieuw met 10% van je score als extra goud (maximaal 800).
+- **Wraak:** kies "Wraak op …" en sloop het kasteel van degene die jou versloeg voor 500 goud extra. Verslaat iemand anders hem eerst, dan vervalt je wraak. Bots nemen ook wraak.
+- **Kroon:** de speler met de hoogste score draagt een kroon, boven zijn koning, op de minimap en in het scorebord.
+
 ## Goudkaravaan
 
 Om de paar minuten klinkt een hoorn: een goudkaravaan (een ossenkar met tien wachters) rijdt via het midden de kaart over. Je ziet hem en zijn route op de minimap. Sloop de kar voor 300 goud; het wrak laat kristallen vallen die iedereen kan oprapen. Bots komen er pas na 20 seconden op af, dus wie snel is heeft een voorsprong. Haalt niemand hem, dan rijdt hij aan de overkant van de kaart af.

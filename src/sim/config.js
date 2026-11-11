@@ -25,6 +25,10 @@ export const WORLD = {
   hqRegenRange: 320,
   hqRegenPerSec: 20,
   spawnGrace: 90,
+  inheritShare: 0.1,   // after a fall you start with 10% of your last score as extra gold...
+  inheritMax: 800,     // ...up to this much
+  revengeBonus: 500,   // gold for flattening the castle of whoever flattened yours
+  crownMargin: 0.05,   // a challenger must beat the leader by 5% (and 50 points) to take the crown
   boost: 3.5,          // admin speed multiplier for the king
   shrineRadius: 170,   // the Kristalhart in the middle of the map
   shrineCapture: 5,    // seconds a king must stand there alone

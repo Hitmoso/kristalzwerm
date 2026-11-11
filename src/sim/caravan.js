@@ -70,6 +70,7 @@ export function lootCaravan(world, wagon, killer) {
   cv.endAt = world.time + CARAVAN.linger;
   cv.x = wagon.x; cv.y = wagon.y; cv.hp = 0;
   if (killer) {
+    if (killer.life) killer.life.caravans++;
     killer.gold += CARAVAN.loot;
     killer.score += CARAVAN.score;
   }

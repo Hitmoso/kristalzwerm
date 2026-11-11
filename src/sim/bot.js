@@ -317,7 +317,8 @@ function think(world, p, st, diff, king, hq) {
     // Aim at whoever is ahead, not at whoever is weakest; then season to taste.
     let lure = 0.4 + 1.6 * (e.score / topScore);
     if (e.id === bot.targetPlayer) lure *= 1.45;          // finish what you started
-    if (e.id === bot.grudge) lure *= 1.4;                 // revenge
+    if (e.id === bot.grudge) lure *= 1.4;                 // remembers who hurt it
+    if (e.id === p.revenge) lure *= 1.6;                  // swore revenge: worth extra gold
     const busy = time - e.hqHitAt < 6 || !ec;             // already in trouble, or king is dead
     if (busy) lure *= 1 + 0.5 * persona.opportunism;
     if (eh.hp < eh.maxHp * 0.5) lure *= 1 + 0.4 * persona.opportunism;
@@ -334,7 +335,7 @@ function think(world, p, st, diff, king, hq) {
     const basePower = es.power * (ec ? 1 : 0.7) + 320 + es.towers * 130;
     const keepGoing = e.id === bot.targetPlayer && bot.goal === 'attack' ? 0.8 : 1; // don't lose heart at the gates
     // No honour in flattening someone far weaker who is not even in the race — unless they started it.
-    const bullying = es.power < myPower * 0.35 && e.score < topScore * 0.8 && e.id !== bot.grudge;
+    const bullying = es.power < myPower * 0.35 && e.score < topScore * 0.8 && e.id !== bot.grudge && e.id !== p.revenge;
     if (!fresh && settled && !bullying && myPower >= 420 && myPower > basePower * aggression * keepGoing) {
       const dh = Math.hypot(eh.x - king.x, eh.y - king.y);
       const s = lure / (1 + dh / 1800);

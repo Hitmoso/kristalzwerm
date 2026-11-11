@@ -480,3 +480,99 @@ test('a castle on the route never stops the caravans for good', () => {
   run(world, CARAVAN.every + 1);
   assert.ok(world.caravan, 'and the next one still comes');
 });
+
+test('after a fall you inherit 10% of your score as gold, capped', () => {
+  const { world, a, b } = duo();
+  a.score = 3000;
+  const hq = findById(world.buildings, a.hqId);
+  hq.hp = 0; hq.hitBy = b.id;
+  step(world);
+  const ev = world.events.find((e) => e.type === 'eliminated');
+  assert.equal(ev.sum.inherit, 300);
+  queueCommand(world, a.id, { type: 'respawn' });
+  step(world);
+  assert.equal(a.inherited, 300);
+  assert.ok(a.gold >= WORLD.startGold + 300);
+  // a huge score is capped
+  a.score = 1e6;
+  const hq2 = findById(world.buildings, a.hqId);
+  b.shieldUntil = 0; a.shieldUntil = 0;
+  hq2.hp = 0; hq2.hitBy = b.id;
+  step(world);
+  queueCommand(world, a.id, { type: 'respawn' });
+  step(world);
+  assert.equal(a.inherited, WORLD.inheritMax);
+});
+
+test('the summary counts what you did this life', () => {
+  const { world, a, b } = duo();
+  a.life.kills = 0;
+  a.kills = 7; a.life.buildings = 2; a.life.caravans = 1; a.life.crystals = 9; a.life.peakArmy = 31;
+  const hq = findById(world.buildings, a.hqId);
+  hq.hp = 0; hq.hitBy = b.id;
+  step(world);
+  const sum = world.events.find((e) => e.type === 'eliminated').sum;
+  assert.deepEqual({ k: sum.kills, b: sum.buildings, c: sum.caravans, x: sum.crystals, p: sum.peakArmy }, { k: 7, b: 2, c: 1, x: 9, p: 31 });
+  assert.ok(sum.seconds >= 0);
+});
+
+test('revenge: flatten the castle of whoever flattened yours for a bonus', () => {
+  const { world, a, b } = duo();
+  const hqA = findById(world.buildings, a.hqId);
+  hqA.hp = 0; hqA.hitBy = b.id;
+  step(world);
+  assert.equal(a.lastKiller, b.id);
+  queueCommand(world, a.id, { type: 'respawn', revenge: true });
+  step(world);
+  assert.equal(a.revenge, b.id);
+  assert.ok(world.events.some((e) => e.type === 'revenge' && e.phase === 'sworn'));
+  const gold = a.gold;
+  const hqB = findById(world.buildings, b.hqId);
+  hqB.hp = 0; hqB.hitBy = a.id;
+  step(world);
+  const paid = world.events.find((e) => e.type === 'revenge' && e.phase === 'done');
+  assert.ok(paid);
+  assert.ok(a.gold - gold >= WORLD.revengeBonus + WORLD.hqBounty);
+  assert.equal(a.revenge, -1);
+});
+
+test('no revenge bonus when someone else gets there first, and no revenge without a choice', () => {
+  const world = createWorld({ seed: 12 });
+  world.crystals.length = 0; world.crystalTimer = -1e9;
+  const a = addPlayer(world, { name: 'A' }), b = addPlayer(world, { name: 'B' }), c = addPlayer(world, { name: 'C' });
+  const hqA = findById(world.buildings, a.hqId);
+  hqA.hp = 0; hqA.hitBy = b.id;
+  step(world);
+  queueCommand(world, a.id, { type: 'respawn' }); // plain restart
+  step(world);
+  assert.equal(a.revenge, -1);
+  const hqA2 = findById(world.buildings, a.hqId);
+  hqA2.hp = 0; hqA2.hitBy = b.id;
+  step(world);
+  queueCommand(world, a.id, { type: 'respawn', revenge: true });
+  step(world);
+  const gold = a.gold;
+  const hqB = findById(world.buildings, b.hqId);
+  hqB.hp = 0; hqB.hitBy = c.id;
+  step(world);
+  assert.ok(world.events.some((e) => e.type === 'revenge' && e.phase === 'lost' && e.player === a.id));
+  assert.equal(a.revenge, -1);
+  assert.ok(a.gold - gold < WORLD.revengeBonus);
+});
+
+test('the crown goes to the top score and does not flicker', () => {
+  const world = createWorld({ seed: 13 });
+  world.crystals.length = 0; world.crystalTimer = -1e9;
+  const a = addPlayer(world, { name: 'A' }), b = addPlayer(world, { name: 'B' });
+  step(world);
+  assert.equal(world.leader, -1, 'nobody has scored yet');
+  a.score = 1000; step(world);
+  assert.equal(world.leader, a.id);
+  b.score = 1020; step(world);
+  assert.equal(world.leader, a.id, 'a 2% lead is not enough');
+  b.score = 1100; step(world);
+  assert.equal(world.leader, b.id);
+  assert.ok(world.events.some((e) => e.type === 'crown' && e.player === b.id));
+  findById(world.buildings, b.hqId).hp = 0; step(world);
+  assert.equal(world.leader, a.id, 'a fallen king loses the crown');
+});

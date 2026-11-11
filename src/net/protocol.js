@@ -24,7 +24,7 @@ export function cleanRoom(raw) {
 
 // Bumped whenever the wire format or game rules change in a way an already-open page cannot
 // handle. A page with another version is refused by the server and reloads itself.
-export const PROTOCOL = 4;
+export const PROTOCOL = 5;
 
 export const MAX_NAME = 14;
 export function cleanName(raw) {

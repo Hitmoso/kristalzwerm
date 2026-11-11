@@ -40,6 +40,7 @@ export function step(world, dt = DT) {
       continue;
     }
     const st = (ctx.stats[p.id] = playerStats(world, p.id));
+    if (p.life && st.supply > p.life.peakArmy) p.life.peakArmy = st.supply;
     p.gold += st.income * dt;
     if (p.isBot) updateBot(world, p, dt, st);
     for (const cmd of p.commands) applyCommand(ctx, p, st, cmd);
@@ -81,6 +82,8 @@ export function step(world, dt = DT) {
     world.events.push({ type: 'order', player: ord.by, order: 'free', target: -1, reason: 'done' });
   }
 
+  updateCrown(world);
+
   if (world.crystals.length < WORLD.crystalCount) {
     world.crystalTimer += dt;
     if (world.crystalTimer >= WORLD.crystalRespawn) {
@@ -93,15 +96,21 @@ export function step(world, dt = DT) {
 function handleDead(ctx, p, dt) {
   const world = ctx.world;
   if (p.left) { p.commands.length = 0; return; }
-  let wantsRespawn = false;
-  for (const cmd of p.commands) if (cmd.type === 'respawn') wantsRespawn = true;
+  let wantsRespawn = false, revenge = false;
+  for (const cmd of p.commands) if (cmd.type === 'respawn') { wantsRespawn = true; revenge = cmd.revenge === true; }
   p.commands.length = 0;
   if (p.isBot) {
     p.respawnIn -= dt;
-    if (p.respawnIn <= 0) wantsRespawn = true;
+    if (p.respawnIn <= 0) { wantsRespawn = true; revenge = true; } // bots always hold a grudge
   }
   if (wantsRespawn) {
     resetPlayer(world, p);
+    const foe = world.players[p.lastKiller];
+    if (revenge && foe && foe !== p && foe.alive && !foe.left) {
+      p.revenge = foe.id;
+      if (p.bot) p.bot.grudge = foe.id;
+      world.events.push({ type: 'revenge', phase: 'sworn', player: p.id, target: foe.id });
+    }
     for (const u of world.units) if (u.owner === p.id) ctx.byId.set(u.id, u);
     for (const b of world.buildings) if (b.owner === p.id) ctx.byId.set(b.id, b);
     world.events.push({ type: 'spawned', player: p.id });
@@ -296,6 +305,7 @@ function dealDamage(ctx, attacker, target, amount, quiet) {
     if (target.kind === 'caravan') lootCaravan(world, target, killer);
     if (!killer) return;
     if (isBuilding) {
+      if (killer.life) killer.life.buildings++;
       killer.score += target.kind === 'hq' ? 500 : BUILDINGS[target.kind].cost;
     } else {
       killer.kills++;
@@ -364,6 +374,24 @@ function moveNeutral(ctx, u, def) {
   const r = def.radius, max = world.size - r;
   u.x = nx < r ? r : nx > max ? max : nx;
   u.y = ny < r ? r : ny > max ? max : ny;
+}
+
+// The crown goes to the highest score. A challenger has to clearly beat the holder, so it
+// does not flicker back and forth between two players who are neck and neck.
+function updateCrown(world) {
+  let holder = world.players[world.leader];
+  if (holder && (!holder.alive || holder.left || holder.score <= 0)) holder = null;
+  let best = holder;
+  for (const p of world.players) {
+    if (!p.alive || p.left || p.score <= 0 || p === holder) continue;
+    const bar = holder ? Math.max(holder.score * (1 + WORLD.crownMargin), holder.score + 50) : 0;
+    if (p.score > bar && (!best || p === holder || p.score > best.score)) best = p;
+  }
+  const id = best ? best.id : -1;
+  if (id !== world.leader) {
+    world.leader = id;
+    if (id >= 0) world.events.push({ type: 'crown', player: id });
+  }
 }
 
 // The Kristalhart: a king standing on it without rival kings claims it after a few seconds.
@@ -687,6 +715,7 @@ function collectCrystals(ctx) {
     const p = world.players[taker.owner];
     p.gold += c.value;
     p.score += 10;
+    if (p.life) p.life.crystals++;
     world.events.push({ type: 'collect', x: c.x, y: c.y, owner: p.id, value: c.value });
     cs[i] = cs[cs.length - 1];
     cs.pop();
@@ -711,10 +740,31 @@ function cleanup(ctx) {
       bounty = WORLD.hqBounty + Math.floor(loser.gold / 2);
       winner.gold += bounty;
     }
+    loser.lastScore = loser.score;
+    loser.lastKiller = winner && winner !== loser ? winner.id : -1;
+    const life = loser.life || {};
     world.events.push({
       type: 'eliminated', player: loser.id, by: winner ? winner.id : -1,
       bounty, score: Math.floor(loser.score), x: b.x, y: b.y,
+      // the summary screen: how this life went, and what the next one starts with
+      sum: {
+        seconds: Math.round(world.time - loser.spawnedAt), kills: loser.kills, buildings: life.buildings || 0,
+        caravans: life.caravans || 0, crystals: life.crystals || 0, peakArmy: life.peakArmy || 0,
+        inherit: Math.min(WORLD.inheritMax, Math.floor(loser.score * WORLD.inheritShare)),
+      },
     });
+    // revenge: whoever swore it on the loser
+    for (const p of world.players) {
+      if (p.revenge !== loser.id) continue;
+      if (p === winner) {
+        p.gold += WORLD.revengeBonus;
+        world.events.push({ type: 'revenge', phase: 'done', player: p.id, target: loser.id, gold: WORLD.revengeBonus });
+      } else {
+        world.events.push({ type: 'revenge', phase: 'lost', player: p.id, target: loser.id, by: winner ? winner.id : -1 });
+      }
+      p.revenge = -1;
+    }
+    if (loser.revenge >= 0) loser.revenge = -1;
     for (const u of world.units) if (u.owner === loser.id) u.hp = 0;
     for (const o of world.buildings) if (o.owner === loser.id) o.hp = 0;
   }

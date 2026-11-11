@@ -21,6 +21,7 @@ export function createWorld({ seed = 1, size = WORLD.size, cheats = false } = {}
     crystalTimer: 0,
     // King-of-the-hill objective: stand on it alone with your king to claim it.
     botOrder: null, // admin order for all bots: { order, target, by }
+    leader: -1,     // who wears the crown (highest score), see updateCrown()
     caravan: null,  // the gold caravan while one is on the map (see caravan.js)
     caravanTimer: CARAVAN.first,
     shrine: { x: size / 2, y: size / 2, r: WORLD.shrineRadius, owner: -1, contender: -1, progress: 0 },
@@ -53,6 +54,11 @@ export function addPlayer(world, { name = 'Speler', isBot = false, difficulty = 
     isBot,
     difficulty,
     alive: false,
+    lastScore: 0,     // score of the previous life: the inheritance is based on it
+    inherited: 0,     // extra gold this life started with
+    lastKiller: -1,   // who flattened our castle last time
+    revenge: -1,      // a player we swore revenge on this life (-1 = none)
+    life: null,       // counters for the summary screen, see newLife()
     army: 'follow',  // 'follow' the king, 'hold' at the castle, or 'attack' armyTarget's castle
     armyTarget: -1,
     boost: false, // admin: king walks WORLD.boost times as fast
@@ -85,7 +91,10 @@ export function addPlayer(world, { name = 'Speler', isBot = false, difficulty = 
 export function resetPlayer(world, player) {
   const spot = findSpawn(world);
   player.alive = true;
-  player.gold = WORLD.startGold;
+  player.inherited = Math.min(WORLD.inheritMax, Math.floor(player.lastScore * WORLD.inheritShare));
+  player.gold = WORLD.startGold + player.inherited;
+  player.life = { kills: 0, buildings: 0, caravans: 0, crystals: 0, peakArmy: 0 };
+  player.revenge = -1;
   player.score = 0;
   player.kills = 0;
   player.lives += 1;

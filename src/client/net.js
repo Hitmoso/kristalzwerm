@@ -87,6 +87,9 @@ export function connect({ name, key, room, onReady, onClose }) {
     me.army = msg.you.army ? msg.you.army[0] : msg.you.hold ? 'hold' : 'follow';
     me.armyTarget = msg.you.army ? msg.you.army[1] : -1;
     me.boost = !!msg.you.boost;
+    me.revenge = msg.you.rv ?? -1;
+    me.inherited = msg.you.inh || 0;
+    world.leader = msg.ld ?? -1;
     net.botOrder = world.botOrder = msg.bo ? { order: msg.bo[0], target: msg.bo[1] } : null;
     world.caravan = msg.cv ? { x: msg.cv[0], y: msg.cv[1], ex: msg.cv[2], ey: msg.cv[3], state: msg.cv[4] === 1 ? 'rolling' : 'looted' } : null;
     const sh = world.shrine;
@@ -183,7 +186,7 @@ export function connect({ name, key, room, onReady, onClose }) {
     want.x = x * k; want.y = y * k;
   };
 
-  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target } });
+  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target, revenge: cmd.revenge } });
 
   // Called every animation frame. Returns how far we are between the last two snapshots.
   net.frame = (dt) => {

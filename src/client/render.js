@@ -277,7 +277,11 @@ export function createRenderer(canvas) {
           label(g, 'Goudkaravaan', it.x, top - 9, '#ffe58a', 14);
         }
         if (u.kind === 'commander') {
-          label(g, u.owner === meId ? 'Jij' : world.players[u.owner].name, it.x, top - (u.hp < u.maxHp ? 8 : 2), u.owner === meId ? '#ffffff' : col.light, 13);
+          const ty = top - (u.hp < u.maxHp ? 8 : 2);
+          label(g, u.owner === meId ? 'Jij' : world.players[u.owner].name, it.x, ty, u.owner === meId ? '#ffffff' : col.light, 13);
+          if (u.owner === world.leader) drawCrown(g, it.x, ty - 20, r.frame);
+          const me = world.players[meId];
+          if (me && me.revenge === u.owner) label(g, 'WRAAK', it.x, ty - (u.owner === world.leader ? 40 : 16), '#ff8a7a', 11);
         }
       }
     }
@@ -287,6 +291,23 @@ export function createRenderer(canvas) {
   };
 
   return r;
+}
+
+// A small gold crown floating over the leader's name.
+function drawCrown(g, x, y, frame) {
+  const bob = Math.sin(frame * 0.08) * 1.5;
+  y += bob;
+  g.fillStyle = 'rgba(255, 210, 74, 0.25)';
+  g.beginPath(); g.arc(x, y - 5, 13, 0, TAU); g.fill();
+  g.beginPath();
+  g.moveTo(x - 11, y); g.lineTo(x - 12, y - 10); g.lineTo(x - 6, y - 5); g.lineTo(x, y - 13);
+  g.lineTo(x + 6, y - 5); g.lineTo(x + 12, y - 10); g.lineTo(x + 11, y); g.closePath();
+  g.fillStyle = '#ffd24a'; g.fill();
+  g.lineWidth = 1.8; g.strokeStyle = '#2a1a10'; g.stroke();
+  g.fillStyle = '#ff5a5a'; g.beginPath(); g.arc(x, y - 4, 2, 0, TAU); g.fill();
+  g.fillStyle = '#7fe3ff';
+  g.beginPath(); g.arc(x - 6, y - 3, 1.3, 0, TAU); g.fill();
+  g.beginPath(); g.arc(x + 6, y - 3, 1.3, 0, TAU); g.fill();
 }
 
 function sparkle(g, x, y, s) {
@@ -469,6 +490,10 @@ function drawMinimap(g, r, world, me, meId) {
   }
   for (const u of world.units) {
     if (u.kind !== 'commander') continue;
+    if (u.owner === world.leader) {
+      g.strokeStyle = '#ffd24a'; g.lineWidth = 2;
+      g.beginPath(); g.arc(ox + u.x * k, oy + u.y * k, 6.5, 0, TAU); g.stroke();
+    }
     g.fillStyle = colorOf(u.owner).main;
     g.strokeStyle = u.owner === meId ? '#ffffff' : '#2a1a10'; g.lineWidth = 1.4;
     g.beginPath(); g.arc(ox + u.x * k, oy + u.y * k, 3.4, 0, TAU); g.fill(); g.stroke();
@@ -492,6 +517,13 @@ function drawMinimap(g, r, world, me, meId) {
     g.strokeStyle = '#2a1a10'; g.lineWidth = 1.4;
     g.beginPath(); g.moveTo(sx, sy - 6); g.lineTo(sx + 4.5, sy); g.lineTo(sx, sy + 6); g.lineTo(sx - 4.5, sy); g.closePath();
     g.fill(); g.stroke();
+  }
+  if (me && me.revenge >= 0 && world.players[me.revenge]) {
+    const hq = world.buildings.find((b) => b.id === world.players[me.revenge].hqId);
+    if (hq) {
+      g.strokeStyle = '#ff5a4a'; g.lineWidth = 2;
+      g.beginPath(); g.arc(ox + hq.x * k, oy + hq.y * k, 9, 0, TAU); g.stroke();
+    }
   }
   if (me && me.army === 'attack' && world.players[me.armyTarget]) {
     const hq = world.buildings.find((b) => b.id === world.players[me.armyTarget].hqId);
