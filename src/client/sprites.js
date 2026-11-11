@@ -597,8 +597,9 @@ const UNIT_ART = {
       // body, belly, neck, head
       ell(g, 0, y, 13.5, 8.5, c.main);
       if (fire) { // a belly glowing like embers
-        ell(g, 1, y + 3, 9.5, 4.6, '#ffb23c', 0);
-        ell(g, 1.5, y + 3.6, 6.4, 2.8, '#ffe066', 0);
+        ell(g, 1, y + 3, 9.5, 4.6, '#ff6a1f', 0);
+        ell(g, 1.3, y + 3.5, 7.4, 3.3, '#ffe066', 0);
+        ell(g, 1.6, y + 4, 4.2, 1.8, '#fff6c8', 0);
       } else if (armor) { // a riveted belly plate
         ell(g, 1, y + 3.4, 10, 4.8, STEEL, 1.1);
         for (const x of [-4, 1, 6]) line(g, x, y - 0.6, x - 0.6, y + 7.4, STEEL_D, 0.9);
@@ -1285,8 +1286,9 @@ export const SPRITE_RES = RES;
 
 // A little cartoon flame, used by the fire specialisations.
 function flame(g, x, y, s) {
-  poly(g, [x - s, y, x - s * 0.5, y - s * 1.6, x, y - s * 0.8, x + s * 0.4, y - s * 2, x + s, y], '#ff8a2b', 1);
-  poly(g, [x - s * 0.5, y, x, y - s, x + s * 0.5, y], '#ffe066', 0);
+  // deep orange outside, a big yellow heart: still reads on the orange, red and yellow teams
+  poly(g, [x - s, y, x - s * 0.5, y - s * 1.6, x, y - s * 0.8, x + s * 0.4, y - s * 2, x + s, y], '#ff6a1f', 1);
+  poly(g, [x - s * 0.62, y, x - s * 0.1, y - s * 0.95, x + s * 0.3, y - s * 1.3, x + s * 0.66, y], '#ffe066', 0);
 }
 
 export const UNIT_KINDS = Object.keys(UNIT_ART);
