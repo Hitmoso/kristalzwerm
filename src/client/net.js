@@ -193,7 +193,7 @@ export function connect({ name, key, room, onReady, onClose }) {
     want.x = x * k; want.y = y * k;
   };
 
-  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target, revenge: cmd.revenge, choice: cmd.choice } });
+  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target, revenge: cmd.revenge, choice: cmd.choice, what: cmd.what } });
 
   // Called every animation frame. Returns how far we are between the last two snapshots.
   net.frame = (dt) => {

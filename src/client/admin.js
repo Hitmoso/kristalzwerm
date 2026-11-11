@@ -23,6 +23,11 @@ export function createAdmin(onAction) {
       <div class="admin-row">
         <button data-a="caravan"><b>Karavaan oproepen</b></button>
       </div>
+      <p class="admin-label">Bots versterken</p>
+      <div class="admin-row">
+        <button data-a="empower" data-what="gold"><b>+1000 goud</b><small>elke bot</small></button>
+        <button data-a="empower" data-what="army"><b>+20 troepen</b><small>elke bot</small></button>
+      </div>
       <p class="admin-label">Alle bots</p>
       <div class="admin-row">
         <button data-o="center"><b>Naar het midden</b></button>
@@ -53,7 +58,7 @@ export function createAdmin(onAction) {
     const b = e.target.closest('button');
     if (!b || b === head) return;
     b.blur();
-    if (b.dataset.a) onAction({ type: b.dataset.a });
+    if (b.dataset.a) onAction({ type: b.dataset.a, what: b.dataset.what });
     else if (b.dataset.o === 'me') onAction({ type: 'order', order: 'attack', target: meId });
     else if (b.dataset.o) onAction({ type: 'order', order: b.dataset.o });
     else if (b.dataset.t) onAction({ type: 'order', order: 'attack', target: Number(b.dataset.t) });

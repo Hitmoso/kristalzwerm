@@ -199,3 +199,20 @@ test('online: buying a specialisation goes through and shows on the units', asyn
   }
   assert.ok(seen > 0, 'the starting soldiers are in view');
 });
+
+test('online: an admin can strengthen the bots, a guest cannot', async (t) => {
+  const game = createRoom({ adminKey: 'k' });
+  const boss = fakeClient(game, { name: 'Baas', key: 'k' }), guest = fakeClient(game, { name: 'Gast' });
+  t.after(() => { game.leave(boss.c); game.leave(guest.c); });
+  await wait(150);
+  const w = game.room.world;
+  const botGold = () => w.players.filter((p) => p.isBot && p.alive && !p.left).reduce((s, p) => s + p.gold, 0);
+  const g0 = botGold();
+  game.receive(guest.c, { t: 'cmd', c: { type: 'empower', what: 'gold' } });
+  await wait(150);
+  assert.ok(botGold() - g0 < 500, 'guest: no effect');
+  const g1 = botGold();
+  game.receive(boss.c, { t: 'cmd', c: { type: 'empower', what: 'gold' } });
+  await wait(150);
+  assert.ok(botGold() - g1 >= 1000 * w.players.filter((p) => p.isBot && p.alive && !p.left).length);
+});

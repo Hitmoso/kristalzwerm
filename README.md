@@ -62,7 +62,7 @@ Als admin heb je links een uitklapbaar **Admin**-menu, plus twee codes die je ti
 | `G` `O` `U` `D` | 1000 goud |
 | `V` `L` `U` `G` | turbo aan/uit: je koning loopt 3,5× zo snel |
 
-In het menu kun je ook meteen een goudkaravaan oproepen.
+In het menu kun je ook meteen een goudkaravaan oproepen, en alle bots versterken: elke bot krijgt 1000 goud of een leger van 20 troepen bij zijn koning.
 
 In het menu stuur je alle bots tegelijk: naar het Kristalhart, naar huis, een speler aanvallen (ook jezelf), of weer vrij spelen. Een aanvalsbevel stopt vanzelf als het doelwit is uitgeschakeld.
 

@@ -178,6 +178,7 @@ function handleEvents(world, me) {
         : e.mode === 'attack' ? `Je leger trekt op naar ${t ? t.name : '?'} — je koning en kasteel staan onbewaakt`
         : e.mode === 'hold' ? 'Je leger bewaakt je kasteel' : 'Je leger volgt je');
     }
+    if (e.type === 'empower' && e.player === me.id) hud.say(e.what === 'gold' ? `${e.bots} bots kregen elk 1000 goud` : `${e.bots} bots kregen elk 20 troepen`);
     if (e.type === 'order' && (e.player === me.id || e.reason === 'done')) hud.say(e.reason === 'done' ? 'Doelwit uitgeschakeld — bots spelen weer zelf' : admin.say(e.order, e.target, world, me));
   }
   sfx.fromEvents(world.events, renderer.cam, me.id);

@@ -14,12 +14,12 @@ const MAX_HUMANS = 10;
 const TARGET_PLAYERS = 6;   // bots fill the world up to this many players
 const MIN_BOTS = 2;
 const BOT_LEVELS = ['normal', 'easy', 'hard', 'normal', 'easy', 'normal'];
-const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1, caravan: 1, spec: 1 };
+const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1, caravan: 1, spec: 1, empower: 1 };
 const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
 const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 const INPUT_QUEUE = 10;  // inputs buffered per client; older ones are dropped
 const MAX_DEBT = 8;      // ticks of late input we are willing to catch up on
-const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1, caravan: 1, revenge: 1, crown: 1 };
+const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1, caravan: 1, revenge: 1, crown: 1, empower: 1 };
 
 export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
   const room = { world: null, clients: new Set(), timer: null, snapCount: 0 };
@@ -251,6 +251,11 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
         const order = msg.c.order, target = msg.c.target;
         if (!ORDERS[order] || (target !== undefined && !Number.isSafeInteger(target))) return;
         queueCommand(room.world, c.playerId, { type, order, target });
+        return;
+      }
+      if (type === 'empower') {
+        if (msg.c.what !== 'gold' && msg.c.what !== 'army') return;
+        queueCommand(room.world, c.playerId, { type, what: msg.c.what });
         return;
       }
       if (type === 'spec') {

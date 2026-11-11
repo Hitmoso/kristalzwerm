@@ -1,6 +1,6 @@
 // One fixed simulation tick. Everything that changes the world happens here.
 
-import { DT, WORLD, UNITS, BUILDINGS, CARAVAN, NEUTRAL, SPECS, SPEC_DEFS, defOf, SLOW_FACTOR } from './config.js';
+import { DT, WORLD, UNITS, BUILDINGS, CARAVAN, NEUTRAL, SPECS, SPEC_DEFS, defOf, SLOW_FACTOR, EMPOWER } from './config.js';
 import { buildGrid, queryGrid } from './grid.js';
 import {
   playerStats, buildingCost, resetPlayer, spawnUnit, spawnBuilding, spawnCrystal, pushOutOfBuildings, moveKing,
@@ -162,6 +162,29 @@ function applyCommand(ctx, p, st, cmd) {
       world.botOrder = { order: cmd.order, target: cmd.order === 'attack' ? t.id : -1, by: p.id };
     }
     world.events.push({ type: 'order', player: p.id, order: cmd.order, target: world.botOrder ? world.botOrder.target : -1 });
+    return;
+  }
+  if (cmd.type === 'empower') {
+    // admin: every living bot gets gold, or a ready-made army next to its king
+    if (!world.cheats && !p.admin) return;
+    if (cmd.what !== 'gold' && cmd.what !== 'army') return;
+    let n = 0;
+    for (const bot of world.players) {
+      if (!bot.isBot || !bot.alive || bot.left) continue;
+      n++;
+      if (cmd.what === 'gold') { bot.gold += EMPOWER.gold; continue; }
+      const at = ctx.byId.get(bot.commanderId) || ctx.byId.get(bot.hqId);
+      if (!at) continue;
+      let i = 0;
+      for (const [kind, count] of Object.entries(EMPOWER.army)) {
+        for (let j = 0; j < count; j++, i++) {
+          const a = i * 2.399, r = 40 + (i % 5) * 14; // a spiral around the king, so they do not stack
+          const u = spawnUnit(world, bot.id, kind, at.x + Math.cos(a) * r, at.y + Math.sin(a) * r);
+          ctx.byId.set(u.id, u);
+        }
+      }
+    }
+    world.events.push({ type: 'empower', player: p.id, what: cmd.what, bots: n });
     return;
   }
   if (cmd.type === 'caravan') {

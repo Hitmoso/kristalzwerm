@@ -576,3 +576,30 @@ test('the crown goes to the top score and does not flicker', () => {
   findById(world.buildings, b.hqId).hp = 0; step(world);
   assert.equal(world.leader, a.id, 'a fallen king loses the crown');
 });
+
+test('admin: make every bot strong with gold or a ready army; humans get nothing, non-admins cannot', () => {
+  const world = createWorld({ seed: 23 });
+  world.crystals.length = 0; world.crystalTimer = -1e9; world.caravanTimer = 1e9;
+  const me = addPlayer(world, { name: 'Ik' });
+  const other = addPlayer(world, { name: 'Ander' });
+  const bots = [0, 1].map(() => addPlayer(world, { isBot: true, difficulty: 'normal' }));
+  step(world);
+  const count = (p) => world.units.filter((u) => u.owner === p.id).length;
+  const before = { gold: bots.map((b) => b.gold), units: bots.map(count), me: count(me), meGold: me.gold };
+  queueCommand(world, me.id, { type: 'empower', what: 'army' });
+  step(world);
+  assert.deepEqual(bots.map(count), before.units, 'not an admin: nothing happens');
+  me.admin = true;
+  queueCommand(world, me.id, { type: 'empower', what: 'army' });
+  queueCommand(world, me.id, { type: 'empower', what: 'gold' });
+  queueCommand(world, me.id, { type: 'empower', what: 'everything' }); // not a choice
+  step(world);
+  bots.forEach((b, i) => {
+    assert.ok(count(b) >= before.units[i] + 20, `bot ${i} got its army`);
+    assert.ok(b.gold >= before.gold[i] + 1000, `bot ${i} got its gold`);
+  });
+  assert.ok(count(me) <= before.me + 1 && count(other) <= before.me + 1, 'humans get nothing');
+  assert.ok(me.gold < before.meGold + 1000);
+  run(world, 1);
+  for (const u of world.units) assert.ok(Number.isFinite(u.x) && Number.isFinite(u.y));
+});

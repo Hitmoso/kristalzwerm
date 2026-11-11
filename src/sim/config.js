@@ -164,4 +164,10 @@ export function defOf(u) {
   return (u.spec && SPEC_DEFS[u.kind] && SPEC_DEFS[u.kind][u.spec]) || UNITS[u.kind];
 }
 
-export const SLOW_FACTOR = 0.6; // slowed units move at 60%
+export const SLOW_FACTOR = 0.6;
+
+// Admin "make the bots strong": what each bot gets per click.
+export const EMPOWER = {
+  gold: 1000,
+  army: { soldier: 6, archer: 5, knight: 3, giant: 2, mage: 2, ballista: 1, healer: 1 }, // 20 troops
+}; // slowed units move at 60%
