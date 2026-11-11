@@ -394,6 +394,94 @@ const UNIT_ART = {
     },
   },
 
+  // The gold caravan: an ox pulling a covered wagon heaped with gold, a driver on the bench.
+  caravan: {
+    box: [-56, -66, 58, 11],
+    draw(g, c, f) {
+      g.beginPath(); g.ellipse(-6, 0, 50, 9, 0, 0, TAU);
+      g.fillStyle = 'rgba(20, 30, 10, 0.28)'; g.fill();
+      const step = f === 1 ? 2.2 : 0;
+      const turn = f === 1 ? 0.4 : 0;
+      // ---- ox (in front, to the right) ----
+      const hide = '#8a5a34', hideD = '#5e3a1e';
+      for (const [x, d] of [[22, step], [27, -step], [38, -step], [43, step]]) {
+        box(g, x + d - 1.8, -11, 3.8, 11, 1.5, hideD, 1.1);
+        box(g, x + d - 2.2, -1.6, 4.4, 2.2, 1, INK, 0);
+      }
+      ell(g, 32, -16, 15, 9, hide);
+      ell(g, 31, -12.5, 9, 4, '#a87650', 0);
+      g.beginPath(); g.moveTo(18, -18); g.quadraticCurveTo(13, -16, 14, -9);
+      g.lineCap = 'round'; g.lineWidth = 2.6; g.strokeStyle = INK; g.stroke(); g.lineWidth = 1.2; g.strokeStyle = hideD; g.stroke();
+      ell(g, 48, -20, 7.5, 7, hide);
+      ell(g, 53, -17.5, 4.5, 3.6, '#d9a98a', 1.2);
+      dot(g, 54.5, -18.5, 0.8, INK);
+      dot(g, 48.5, -22.5, 1.1, INK);
+      for (const s of [-1, 1]) {
+        g.beginPath(); g.moveTo(46, -25); g.quadraticCurveTo(44 + s * 3, -33, 40 + s * 6, -32);
+        g.lineWidth = 3.2; g.strokeStyle = INK; g.stroke(); g.lineWidth = 1.8; g.strokeStyle = '#f4efe2'; g.stroke();
+      }
+      // yoke and shaft to the wagon
+      line(g, 4, -14, 22, -19, INK, 3.4);
+      line(g, 4, -14, 22, -19, WOOD, 1.8);
+      box(g, 21, -26, 4, 12, 1.5, WOOD_D, 1.1);
+      // ---- wagon ----
+      const wheel = (x, rad) => {
+        ell(g, x, -rad, rad, rad, WOOD_D, 1.6);
+        ell(g, x, -rad, rad * 0.68, rad * 0.68, WOOD, 1);
+        for (let i = 0; i < 4; i++) {
+          const a = turn + i * Math.PI / 4;
+          line(g, x - Math.cos(a) * rad * 0.65, -rad - Math.sin(a) * rad * 0.65, x + Math.cos(a) * rad * 0.65, -rad + Math.sin(a) * rad * 0.65, WOOD_D, 1.2);
+        }
+        dot(g, x, -rad, 2, STEEL);
+      };
+      wheel(-34, 11);                                          // far rear wheel peeks out
+      box(g, -48, -26, 52, 12, 2.5, WOOD);                     // bed
+      line(g, -46, -20, 2, -20, WOOD_D, 1);
+      for (const x of [-38, -22, -6]) line(g, x, -25, x, -15, WOOD_D, 0.9);
+      // canvas cover with bronze bands, open at the front
+      g.beginPath();
+      g.moveTo(-47, -26); g.quadraticCurveTo(-48, -52, -30, -55); g.lineTo(-6, -55);
+      g.quadraticCurveTo(6, -52, 3, -26); g.closePath(); ink(g, c.light, 1.6);
+      g.beginPath(); g.moveTo(-6, -55); g.quadraticCurveTo(6, -52, 3, -26); g.lineTo(-4, -26); g.quadraticCurveTo(-1, -48, -10, -54); g.closePath();
+      g.fillStyle = 'rgba(120, 90, 50, 0.18)'; g.fill();
+      for (const x of [-38, -24]) {
+        g.beginPath(); g.moveTo(x, -26); g.quadraticCurveTo(x - 1, -45, x + 2, -55.5);
+        g.lineWidth = 2.4; g.strokeStyle = c.dark; g.stroke();
+      }
+      // gold heaped at the open front, coins and a chest
+      box(g, -6, -36, 13, 10, 2, '#7a4a20', 1.2);
+      line(g, -6, -31.5, 7, -31.5, GOLD, 1.6);
+      dot(g, 0.5, -31.5, 1.4, INK);
+      for (const [x, y] of [[-2, -38], [3, -39], [7, -37], [0, -41], [5, -42]]) ell(g, x, y, 3, 2, GOLD, 1);
+      poly(g, [-8, -40, -5, -47, -2, -40], '#ffe58a', 1);
+      // driver on the bench
+      box(g, 2, -36, 9, 10, 3, c.main);
+      ell(g, 7, -41, 4.6, 4.4, SKIN);
+      dot(g, 9, -41.5, 0.9, INK);
+      g.beginPath(); g.arc(7, -42.5, 5.2, Math.PI * 1.05, -0.05 * Math.PI); g.closePath(); ink(g, c.dark, 1.1);
+      line(g, 10, -33, 22, -24, INK, 1);                       // reins
+      // sacks of gold lashed to the side, coins spilling out of the tops
+      for (const [x, w] of [[-41, 7], [-30, 8], [-18, 7]]) {
+        g.beginPath();
+        g.moveTo(x - w, -25); g.quadraticCurveTo(x - w - 1, -36, x - w * 0.4, -38);
+        g.lineTo(x + w * 0.4, -38); g.quadraticCurveTo(x + w + 1, -36, x + w, -25); g.closePath();
+        ink(g, '#b98a55', 1.3);
+        line(g, x - w * 0.5, -35, x + w * 0.5, -35, WOOD_D, 1.2);
+        ell(g, x - 2, -39.5, 2.6, 1.8, GOLD, 1);
+        ell(g, x + 2.2, -40.5, 2.6, 1.8, GOLD, 1);
+        ell(g, x, -42.5, 2.4, 1.7, '#ffe58a', 1);
+      }
+      // near wheels
+      wheel(-36, 12);
+      wheel(-4, 10);
+      // banner on a pole at the back: a gold coin on sand
+      line(g, -47, -26, -47, -63, INK, 2.4);
+      line(g, -47, -26, -47, -63, WOOD_D, 1.2);
+      g.beginPath(); g.moveTo(-47, -63); g.quadraticCurveTo(-38, -64, -32, -60); g.quadraticCurveTo(-38, -56, -47, -55); g.closePath(); ink(g, c.main, 1.1);
+      dot(g, -40, -59.5, 2.3, GOLD);
+    },
+  },
+
   commander: {
     box: [-22, -56, 38, 8],
     draw(g, c, f) {

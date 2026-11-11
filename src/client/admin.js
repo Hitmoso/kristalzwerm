@@ -20,6 +20,9 @@ export function createAdmin(onAction) {
         <button data-a="boost" class="toggle"><b>Turbo</b><small>V L U G</small></button>
         <button data-a="cheat"><b>+1000 goud</b><small>G O U D</small></button>
       </div>
+      <div class="admin-row">
+        <button data-a="caravan"><b>Karavaan oproepen</b></button>
+      </div>
       <p class="admin-label">Alle bots</p>
       <div class="admin-row">
         <button data-o="center"><b>Naar het midden</b></button>

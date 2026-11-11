@@ -174,6 +174,11 @@ function makeVoices(ac, noise) {
       [N.G4, N.Eb4, N.C4].forEach((f, i) => brass(o, t + i * 0.28, f, 0.4, 0.11 * v));
       for (const f of [N.C4, N.Eb4, N.G3]) brass(o, t + 0.84, f * 0.5, 1.1, 0.07 * v);
     } },
+    caravan: { reverb: 0.6, play(o, t, v) {           // distant horn: a caravan is coming
+      brass(o, t, N.G3, 0.5, 0.1 * v);
+      brass(o, t + 0.55, N.C4, 0.9, 0.11 * v);
+      brass(o, t + 0.55, N.G4 * 0.5, 0.9, 0.06 * v);
+    } },
     coins: { reverb: 0.4, play(o, t, v) {
       for (let i = 0; i < 7; i++) bell(o, t + i * 0.055, (1800 + Math.random() * 900), 0.25, 0.06 * v, 0.8);
     } },
@@ -284,6 +289,10 @@ export function createSfx() {
         case 'captured': play('capture', e.player === meId ? 1 : 0.5); break;
         case 'eliminated': if (e.player === meId) play('defeat', 1); else if (e.by === meId) play('victory', 1); break;
         case 'cheat': if (e.player === meId) play('coins', 1); break;
+        case 'caravan':
+          if (e.phase === 'spawn') play('caravan', 0.8);
+          else if (e.phase === 'loot') play(e.by === meId ? 'coins' : 'crumble', e.by === meId ? 1 : v);
+          break;
         default:
       }
     }

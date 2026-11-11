@@ -1,11 +1,12 @@
 // One fixed simulation tick. Everything that changes the world happens here.
 
-import { DT, WORLD, UNITS, BUILDINGS } from './config.js';
+import { DT, WORLD, UNITS, BUILDINGS, CARAVAN, NEUTRAL } from './config.js';
 import { buildGrid, queryGrid } from './grid.js';
 import {
   playerStats, buildingCost, resetPlayer, spawnUnit, spawnBuilding, spawnCrystal, pushOutOfBuildings, moveKing,
 } from './world.js';
 import { updateBot } from './bot.js';
+import { updateCaravan, spawnCaravan, lootCaravan } from './caravan.js';
 
 const GRID_CELL = 120;
 const FOLLOW_SPEED = 215;
@@ -58,6 +59,7 @@ export function step(world, dt = DT) {
   ctx.grid = buildGrid(world.units, GRID_CELL);
   updateUnits(ctx);
   updateShrine(ctx);
+  updateCaravan(world, dt);
   updateBuildings(ctx);
   collectCrystals(ctx);
   cleanup(ctx);
@@ -153,6 +155,12 @@ function applyCommand(ctx, p, st, cmd) {
     world.events.push({ type: 'order', player: p.id, order: cmd.order, target: world.botOrder ? world.botOrder.target : -1 });
     return;
   }
+  if (cmd.type === 'caravan') {
+    // admin: call a caravan right now (if none is on the map)
+    if (!world.cheats && !p.admin) return;
+    spawnCaravan(world);
+    return;
+  }
   if (cmd.type === 'cheat') {
     if (!world.cheats && !p.admin) return;
     p.gold += WORLD.cheatGold;
@@ -161,7 +169,7 @@ function applyCommand(ctx, p, st, cmd) {
   }
   if (cmd.type === 'train') {
     const def = UNITS[cmd.kind];
-    if (!def || cmd.kind === 'commander') return;
+    if (!def || cmd.kind === 'commander' || def.neutral) return;
     if (def.needs && !st[def.needs]) return notice(world, p, def.needs);
     if (p.gold < def.cost) return notice(world, p, 'gold');
     if (st.supply + def.supply > st.cap) return notice(world, p, 'supply');
@@ -268,7 +276,7 @@ function dealDamage(ctx, attacker, target, amount, quiet) {
     // Buildings behind a spawn shield take no damage; attacking a base drops your own shield.
     if (world.players[target.owner].shieldUntil > world.time) return;
     const atk = world.players[attacker.owner];
-    if (atk.shieldUntil > world.time) atk.shieldUntil = world.time;
+    if (atk && atk.shieldUntil > world.time) atk.shieldUntil = world.time;
   }
   target.hp -= amount;
   target.hitAt = world.time;
@@ -284,7 +292,9 @@ function dealDamage(ctx, attacker, target, amount, quiet) {
     world.events.push({ type: 'hit', kind: attacker.kind, x: target.x, y: target.y, owner: attacker.owner });
   }
   if (target.hp <= 0) {
-    const killer = world.players[attacker.owner];
+    const killer = world.players[attacker.owner]; // undefined when a caravan guard landed the blow
+    if (target.kind === 'caravan') lootCaravan(world, target, killer);
+    if (!killer) return;
     if (isBuilding) {
       killer.score += target.kind === 'hq' ? 500 : BUILDINGS[target.kind].cost;
     } else {
@@ -292,6 +302,68 @@ function dealDamage(ctx, attacker, target, amount, quiet) {
       killer.score += target.kind === 'commander' ? 100 : UNITS[target.kind].cost;
     }
   }
+}
+
+// The caravan's cart rolls along its route; its guards keep close and fight off raiders.
+function moveNeutral(ctx, u, def) {
+  const world = ctx.world, dt = ctx.dt, cv = world.caravan;
+  if (!cv) return;
+  let nx = u.x, ny = u.y;
+  if (u.kind === 'caravan') {
+    if (cv.state !== 'rolling') return;
+    const dx = cv.ex - u.x, dy = cv.ey - u.y, d = Math.hypot(dx, dy);
+    if (d < 40) { cv.arrived = true; return; }
+    let mx = dx / d, my = dy / d;
+    // something in the way (a castle on the route): veer around it on a fixed side
+    const step = def.speed * dt;
+    pushOutOfBuildings(world.buildings, u.x + mx * step, u.y + my * step, def.radius, _pos);
+    if (Math.hypot(_pos.x - u.x, _pos.y - u.y) < step * 0.6) {
+      const s = cv.side;
+      mx = mx * 0.35 - my * s; my = my * 0.35 + (dx / d) * s;
+      const l = Math.hypot(mx, my); mx /= l; my /= l;
+    }
+    u.fx = mx; u.fy = my;
+    nx = u.x + mx * step;
+    ny = u.y + my * step;
+  } else {
+    const wagon = ctx.byId.get(cv.wagonId);
+    const ax = wagon && wagon.hp > 0 ? wagon.x : cv.x, ay = wagon && wagon.hp > 0 ? wagon.y : cv.y;
+    const fromCart = Math.hypot(u.x - ax, u.y - ay);
+    let target = null;
+    if (fromCart < CARAVAN.guardLeash) {
+      target = u.targetId ? ctx.byId.get(u.targetId) : null;
+      const air = canHitAir(u.kind);
+      if (target && (target.hp <= 0 || (!air && UNITS[target.kind] && UNITS[target.kind].flying))) target = null;
+      if (!target || (world.tick + u.id) % 4 === 0) target = nearestEnemy(ctx, u.x, u.y, CARAVAN.guardAggro, NEUTRAL, false, air);
+    }
+    u.targetId = target ? target.id : 0;
+    let vx = 0, vy = 0;
+    if (target) {
+      const dx = target.x - u.x, dy = target.y - u.y, d = Math.hypot(dx, dy) || 0.001;
+      u.fx = dx / d; u.fy = dy / d;
+      if (d - def.radius - radiusOf(target) <= def.range) { if (u.cd <= 0) attack(ctx, u, def, target); }
+      else { vx = (dx / d) * def.speed; vy = (dy / d) * def.speed; }
+    } else {
+      // escort ring around the cart, front guards ahead of it
+      const a = (u.slot / CARAVAN.guards.length) * Math.PI * 2;
+      const gx = ax + Math.cos(a) * 62, gy = ay + Math.sin(a) * 52;
+      const dx = gx - u.x, dy = gy - u.y, d = Math.hypot(dx, dy);
+      if (d > 3) {
+        const sp = Math.min(FOLLOW_SPEED, d * 5);
+        vx = (dx / d) * sp; vy = (dy / d) * sp;
+        u.fx = dx / d; u.fy = dy / d;
+      }
+    }
+    nx = u.x + vx * dt;
+    ny = u.y + vy * dt;
+  }
+  if (!def.flying) {
+    pushOutOfBuildings(world.buildings, nx, ny, def.radius, _pos);
+    nx = _pos.x; ny = _pos.y;
+  }
+  const r = def.radius, max = world.size - r;
+  u.x = nx < r ? r : nx > max ? max : nx;
+  u.y = ny < r ? r : ny > max ? max : ny;
 }
 
 // The Kristalhart: a king standing on it without rival kings claims it after a few seconds.
@@ -457,6 +529,7 @@ function updateUnits(ctx) {
     u.py = u.y;
     u.cd -= dt;
     const def = UNITS[u.kind];
+    if (u.owner === NEUTRAL) { moveNeutral(ctx, u, def); continue; }
     const p = world.players[u.owner];
     let vx = 0, vy = 0;
 
@@ -607,7 +680,7 @@ function collectCrystals(ctx) {
     const c = cs[i];
     let taker = null;
     queryGrid(ctx.grid, c.x, c.y, WORLD.pickupRadius, (u) => {
-      if (taker || u.hp <= 0) return;
+      if (taker || u.hp <= 0 || u.owner === NEUTRAL) return;
       if (Math.hypot(u.x - c.x, u.y - c.y) <= WORLD.pickupRadius) taker = u;
     });
     if (!taker) continue;

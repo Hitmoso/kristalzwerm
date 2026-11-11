@@ -6,7 +6,9 @@
 //   steer()  every tick: turns the goal into a stick direction — curved turns, walking
 //            around buildings and enemy towers, keeping distance and circling in a fight
 
-import { DIFFICULTY, UNITS, BUILDINGS, WORLD } from './config.js';
+import { DIFFICULTY, UNITS, BUILDINGS, WORLD, CARAVAN } from './config.js';
+
+const RAID_POWER = 850; // army value a bot wants before taking on a caravan escort
 import { rand, randRange } from './rng.js';
 import { playerStats, buildingCost, queueCommand, setInput, findById } from './world.js';
 
@@ -339,6 +341,15 @@ function think(world, p, st, diff, king, hq) {
       if (s > bestScore) { bestScore = s; best = { id: e.id, x: eh.x, y: eh.y }; }
     }
   }
+
+  // A gold caravan nearby is worth more than most fights: go for the cart.
+  const cv = world.caravan;
+  let raid = null;
+  if (cv && cv.state === 'rolling' && world.time - cv.startedAt > CARAVAN.botDelay && myPower >= RAID_POWER * persona.aggression) {
+    const dc = Math.hypot(cv.x - king.x, cv.y - king.y);
+    if (dc < 900 + 500 * persona.opportunism) raid = { x: cv.x, y: cv.y, d: dc };
+  }
+  if (raid && (!best || raid.d < 1200)) return setGoal(bot, 'attack', raid.x, raid.y, -1);
 
   if (best) {
     // An army strung out across the map loses: let the stragglers catch up first.

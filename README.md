@@ -26,6 +26,10 @@ Met de knoppen **Volgen**, **Kasteel** en **Aanval** onderaan stuur je je leger:
 | Aanval-knop | leger naar het kasteel van een tegenstander sturen |
 | M | geluid aan/uit |
 
+## Goudkaravaan
+
+Om de paar minuten klinkt een hoorn: een goudkaravaan (een ossenkar met tien wachters) rijdt via het midden de kaart over. Je ziet hem en zijn route op de minimap. Sloop de kar voor 300 goud; het wrak laat kristallen vallen die iedereen kan oprapen. Bots komen er pas na 20 seconden op af, dus wie snel is heeft een voorsprong. Haalt niemand hem, dan rijdt hij aan de overkant van de kaart af.
+
 ## Adminrechten
 
 Als admin heb je links een uitklapbaar **Admin**-menu, plus twee codes die je tijdens het spel intypt:
@@ -34,6 +38,8 @@ Als admin heb je links een uitklapbaar **Admin**-menu, plus twee codes die je ti
 |---|---|
 | `G` `O` `U` `D` | 1000 goud |
 | `V` `L` `U` `G` | turbo aan/uit: je koning loopt 3,5× zo snel |
+
+In het menu kun je ook meteen een goudkaravaan oproepen.
 
 In het menu stuur je alle bots tegelijk: naar het Kristalhart, naar huis, een speler aanvallen (ook jezelf), of weer vrij spelen. Een aanvalsbevel stopt vanzelf als het doelwit is uitgeschakeld.
 

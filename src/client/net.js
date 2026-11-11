@@ -76,6 +76,7 @@ export function connect({ name, key, room, onReady, onClose }) {
     me.armyTarget = msg.you.army ? msg.you.army[1] : -1;
     me.boost = !!msg.you.boost;
     net.botOrder = world.botOrder = msg.bo ? { order: msg.bo[0], target: msg.bo[1] } : null;
+    world.caravan = msg.cv ? { x: msg.cv[0], y: msg.cv[1], ex: msg.cv[2], ey: msg.cv[3], state: msg.cv[4] === 1 ? 'rolling' : 'looted' } : null;
     const sh = world.shrine;
     sh.x = sh.y = world.size / 2;
     sh.owner = msg.sh[0]; sh.contender = msg.sh[1]; sh.progress = msg.sh[2] / 100;

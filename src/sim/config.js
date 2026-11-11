@@ -34,6 +34,25 @@ export const WORLD = {
 };
 
 // range = reach beyond the two bodies; `needs` = building that unlocks the unit.
+// Owner id of things that belong to nobody (the gold caravan and its escort).
+export const NEUTRAL = -1;
+
+export const CARAVAN = {
+  first: 100,        // seconds into a world before the first caravan
+  every: 150,        // seconds between one caravan ending and the next appearing
+  speed: 70,         // the cart: a crossing takes about a minute and a quarter
+  botDelay: 20,      // bots only react this long after the horn; players get a head start
+  edge: 160,         // starts and ends this far inside the arena edge
+  offset: 1400,      // random sideways shift of the route through the middle
+  loot: 300,         // gold for whoever destroys the cart
+  score: 200,
+  crystals: 8,       // crystals the wreck spills, free for anyone
+  linger: 20,        // seconds the leftover guards hang around after a raid
+  guards: ['knight', 'knight', 'knight', 'archer', 'archer', 'archer', 'archer', 'soldier', 'soldier', 'soldier'],
+  guardLeash: 300,   // guards never stray further than this from the cart
+  guardAggro: 210,
+};
+
 export const UNITS = {
   // The king hits hard: two blows fell a soldier.
   commander: { hp: 520, dmg: 30, range: 150, cd: 0.5, speed: 190, radius: 15, supply: 0, cost: 0, train: 0 },
@@ -45,6 +64,8 @@ export const UNITS = {
   giant: { hp: 340, dmg: 30, range: 12, cd: 1.2, speed: 95, radius: 16, supply: 3, cost: 130, train: 6, needs: 'barracks', buildingMult: 2.5 },
   // Siege crossbow on wheels: slow and fragile up close, but its bolts tear dragons apart.
   ballista: { hp: 150, dmg: 12, range: 230, cd: 1.4, speed: 110, radius: 13, supply: 2, cost: 100, train: 5, needs: 'barracks', airMult: 3.5 },
+  // The gold caravan's cart: neutral, unarmed, tough, never trainable.
+  caravan: { hp: 1700, dmg: 0, range: 0, cd: 1, speed: 70, radius: 24, supply: 0, cost: 300, train: 0, neutral: true },
   // Fireball hits everything near the target.
   mage: { hp: 45, dmg: 13, range: 180, cd: 1.5, speed: 130, radius: 8, supply: 2, cost: 95, train: 4.5, needs: 'academy', splash: 55 },
   // Does not fight; mends the most wounded ally nearby.

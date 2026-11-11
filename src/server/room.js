@@ -14,12 +14,12 @@ const MAX_HUMANS = 10;
 const TARGET_PLAYERS = 6;   // bots fill the world up to this many players
 const MIN_BOTS = 2;
 const BOT_LEVELS = ['normal', 'easy', 'hard', 'normal', 'easy', 'normal'];
-const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1 };
+const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1, caravan: 1 };
 const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
 const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 const INPUT_QUEUE = 10;  // inputs buffered per client; older ones are dropped
 const MAX_DEBT = 8;      // ticks of late input we are willing to catch up on
-const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1 };
+const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1, caravan: 1 };
 
 export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
   const room = { world: null, clients: new Set(), timer: null, snapCount: 0 };
@@ -168,6 +168,8 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       p: shared.p, b: shared.b, u,
       sh: [world.shrine.owner, world.shrine.contender, Math.round(world.shrine.progress * 100)],
       bo: world.botOrder ? [world.botOrder.order, world.botOrder.target] : null,
+      // the caravan is on everyone's minimap, wherever it is: x, y, end x, end y, state (1 rolling, 2 looted)
+      cv: world.caravan ? [Math.round(world.caravan.x), Math.round(world.caravan.y), Math.round(world.caravan.ex), Math.round(world.caravan.ey), world.caravan.state === 'rolling' ? 1 : 2] : null,
     };
     // Crystals only change when one is picked up or appears: send the list just then.
     if (c.crystalSig !== shared.sig) { c.crystalSig = shared.sig; msg.c = shared.c; }

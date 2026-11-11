@@ -172,6 +172,14 @@ export function createHud(onAction) {
   const events = (world, me) => {
     for (const e of world.events) {
       if (e.type === 'cheat' && e.player === me.id) say(`Geheime schatkist geopend: +${e.gold} goud`);
+      if (e.type === 'caravan') {
+        if (e.phase === 'spawn') say('Een goudkaravaan trekt door het land — zie de kaart rechtsonder');
+        else if (e.phase === 'escaped') say('De goudkaravaan is ontsnapt');
+        else if (e.phase === 'loot') {
+          const who = e.by === me.id ? 'Jij hebt' : world.players[e.by] ? `${world.players[e.by].name} heeft` : 'Iemand heeft';
+          say(`${who} de goudkaravaan geplunderd (+${e.gold} goud)`, e.by !== me.id);
+        }
+      }
       if (e.type === 'captured') {
         const who = e.player === me.id ? 'Jij hebt' : `${world.players[e.player] ? world.players[e.player].name : 'Iemand'} heeft`;
         say(`${who} het Kristalhart veroverd (+${WORLD.shrineIncome} goud/s)`, e.player !== me.id);

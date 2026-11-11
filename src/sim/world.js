@@ -1,7 +1,7 @@
 // World state: plain data plus the functions that create and mutate it.
 // No DOM, no wall clock, no Math.random — safe to run on a server.
 
-import { WORLD, UNITS, BUILDINGS } from './config.js';
+import { WORLD, UNITS, BUILDINGS, CARAVAN } from './config.js';
 import { rand, randRange } from './rng.js';
 
 export function createWorld({ seed = 1, size = WORLD.size, cheats = false } = {}) {
@@ -21,6 +21,8 @@ export function createWorld({ seed = 1, size = WORLD.size, cheats = false } = {}
     crystalTimer: 0,
     // King-of-the-hill objective: stand on it alone with your king to claim it.
     botOrder: null, // admin order for all bots: { order, target, by }
+    caravan: null,  // the gold caravan while one is on the map (see caravan.js)
+    caravanTimer: CARAVAN.first,
     shrine: { x: size / 2, y: size / 2, r: WORLD.shrineRadius, owner: -1, contender: -1, progress: 0 },
   };
   for (let i = 0; i < WORLD.crystalCount; i++) spawnCrystal(world);

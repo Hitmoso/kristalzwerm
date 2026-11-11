@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById, spawnUnit, spawnBuilding,
-  DT, WORLD, UNITS,
+  DT, WORLD, UNITS, CARAVAN, NEUTRAL,
 } from '../src/sim/index.js';
 
 const run = (world, seconds) => { for (let i = 0; i < Math.round(seconds / DT); i++) step(world); };
@@ -388,4 +388,69 @@ test('healers keep their distance from enemies but still heal', () => {
   }
   assert.ok(healed > 0, 'still heals');
   assert.ok(closest > 130, `came within ${closest.toFixed(0)} of the enemy`);
+});
+
+test('a caravan appears on schedule, crosses the map and escapes if nobody stops it', () => {
+  const world = createWorld({ seed: 31 });
+  world.crystals.length = 0; world.crystalTimer = -1e9;
+  addPlayer(world, { name: 'Kijker' });
+  run(world, CARAVAN.first - 1);
+  assert.equal(world.caravan, null);
+  run(world, 2);
+  const cv = world.caravan;
+  assert.ok(cv, 'it arrived on time');
+  assert.ok(world.events.length >= 0);
+  const wagon = findById(world.units, cv.wagonId);
+  assert.equal(wagon.owner, NEUTRAL);
+  assert.equal(cv.guards.length, CARAVAN.guards.length);
+  const start = { x: wagon.x, y: wagon.y };
+  run(world, 5);
+  assert.ok(Math.hypot(wagon.x - start.x, wagon.y - start.y) > CARAVAN.speed * 4, 'it moves');
+  let escaped = false;
+  for (let i = 0; i < 200 * 30 && !escaped; i++) {
+    step(world);
+    escaped = world.events.some((e) => e.type === 'caravan' && e.phase === 'escaped');
+  }
+  assert.ok(escaped, 'it rolled off the far side');
+  assert.equal(world.caravan, null);
+  assert.equal(world.units.filter((u) => u.owner === NEUTRAL).length, 0, 'cart and guards are gone');
+  assert.ok(world.units.every((u) => Number.isFinite(u.x) && Number.isFinite(u.y)));
+});
+
+test('destroying the cart pays the raider and spills crystals; guards fight back', () => {
+  const { world, a, ca } = stage();
+  a.admin = true;
+  queueCommand(world, a.id, { type: 'caravan' });
+  step(world);
+  const cv = world.caravan;
+  const wagon = findById(world.units, cv.wagonId);
+  // park the king's army right next to the cart
+  ca.x = wagon.x - 130; ca.y = wagon.y;
+  for (let i = 0; i < 14; i++) spawnUnit(world, a.id, i % 2 ? 'giant' : 'archer', wagon.x - 60 + (i % 4) * 8, wagon.y - 30 + i * 5);
+  const gold = a.gold;
+  let guardsHit = false, looted = null;
+  for (let i = 0; i < 60 * 30 && !looted; i++) {
+    if (wagon.hp > 0) { ca.x = wagon.x - 130; ca.y = wagon.y; } // the king rides along with the cart
+    step(world);
+    if (world.events.some((e) => e.type === 'hit' && e.owner === NEUTRAL || e.type === 'shot' && e.owner === NEUTRAL)) guardsHit = true;
+    looted = world.events.find((e) => e.type === 'caravan' && e.phase === 'loot');
+  }
+  assert.ok(guardsHit, 'the escort fights back');
+  assert.ok(looted, 'the cart was destroyed');
+  assert.equal(looted.by, a.id);
+  assert.ok(a.gold - gold >= CARAVAN.loot, `earned ${a.gold - gold}`);
+  assert.ok(world.crystals.length >= CARAVAN.crystals - 2, 'the wreck spilled crystals'); // some may be picked up at once
+  run(world, CARAVAN.linger + 1);
+  assert.equal(world.caravan, null);
+  assert.equal(world.units.filter((u) => u.owner === NEUTRAL).length, 0);
+});
+
+test('nobody can train a caravan, and only admins can summon one', () => {
+  const { world, me } = (() => { const w = createWorld({ seed: 5 }); return { world: w, me: addPlayer(w, { name: 'Ik' }) }; })();
+  me.gold = 5000;
+  queueCommand(world, me.id, { type: 'train', kind: 'caravan' });
+  queueCommand(world, me.id, { type: 'caravan' });
+  step(world);
+  assert.equal(me.queue.length, 0);
+  assert.equal(world.caravan, null);
 });

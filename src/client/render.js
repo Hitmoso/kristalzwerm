@@ -15,7 +15,9 @@ export const COLORS = [
   { main: '#ff8a3d', dark: '#a34a10', light: '#ffe2cc' },
   { main: '#35c9b5', dark: '#167a6d', light: '#d2f7f1' },
 ];
-export const colorOf = (owner) => COLORS[owner % COLORS.length];
+// Neutral (the caravan and its escort): sand with bronze trim, unlike any player colour.
+export const NEUTRAL_COLOR = { main: '#c8b48a', dark: '#7a5a2e', light: '#f6ecd2' };
+export const colorOf = (owner) => (owner < 0 ? NEUTRAL_COLOR : COLORS[owner % COLORS.length]);
 
 const VIEW_HEIGHT = 860; // world units visible vertically
 const MINIMAP = 176;
@@ -96,6 +98,13 @@ export function createRenderer(canvas) {
         if (!inView(e.x, e.y, 50)) continue;
         fx({ kind: 'ring', x: e.x, y: e.y, t: 0, life: 0.3, size: 24, color: '#ffe58a' });
         if (e.owner === meId) fx({ kind: 'text', x: e.x, y: e.y - 18, t: 0, life: 0.9, text: `+${e.value}` });
+      } else if (e.type === 'caravan' && e.phase === 'loot') {
+        // the cart bursts: a shower of coins, a golden ring, and the haul over the raider's head
+        if (!inView(e.x, e.y, 200)) continue;
+        fx({ kind: 'ring', x: e.x, y: e.y, t: 0, life: 0.8, size: 90, color: '#ffd24a' });
+        fx({ kind: 'coins', x: e.x, y: e.y - 20, t: 0, life: 1.1, seed: e.x });
+        fx({ kind: 'text', x: e.x, y: e.y - 60, t: 0, life: 1.6, text: e.by === meId ? `+${e.gold} goud` : 'Geplunderd!' });
+        r.shake = Math.max(r.shake, 5);
       } else if (e.type === 'built') {
         if (!inView(e.x, e.y, 100)) continue;
         fx({ kind: 'ring', x: e.x, y: e.y, t: 0, life: 0.5, size: BUILDINGS[e.kind].radius * 2, color: '#ffffff' });
@@ -263,6 +272,10 @@ export function createRenderer(canvas) {
         g.drawImage(s.cv, it.x + s.dx, it.uy + s.dy, s.w, s.h);
         const top = it.uy + s.dy + (u.kind === 'commander' ? 0 : 4);
         if (u.hp < u.maxHp) bar(g, it.x, top - 3, def.radius * 2 + 6, u.hp / u.maxHp, 3.5, null);
+        if (u.kind === 'caravan') {
+          if (u.hp >= u.maxHp) bar(g, it.x, top - 3, def.radius * 2 + 6, 1, 3.5, null);
+          label(g, 'Goudkaravaan', it.x, top - 9, '#ffe58a', 14);
+        }
         if (u.kind === 'commander') {
           label(g, u.owner === meId ? 'Jij' : world.players[u.owner].name, it.x, top - (u.hp < u.maxHp ? 8 : 2), u.owner === meId ? '#ffffff' : col.light, 13);
         }
@@ -375,6 +388,14 @@ function drawEffects(g, r, frameDt) {
         g.arc(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d * 0.6 - k * 12, e.size * 0.42 * (1 - k * 0.5), 0, TAU);
         g.fill();
       }
+    } else if (e.kind === 'coins') {
+      for (let j = 0; j < 16; j++) {
+        const a = j * 0.39 + e.seed, sp = 60 + (j % 5) * 22;
+        const x = e.x + Math.cos(a) * sp * k, y = e.y - Math.sin(1.2 + (j % 3) * 0.4) * 90 * k + 160 * k * k + Math.sin(a) * 18 * k;
+        g.fillStyle = j % 3 ? '#ffd24a' : '#fff0a8';
+        g.strokeStyle = '#7a5200'; g.lineWidth = 1.2;
+        g.beginPath(); g.ellipse(x, y, 4.2, 3, j, 0, TAU); g.fill(); g.stroke();
+      }
     } else if (e.kind === 'text') {
       g.font = `800 18px ${FONT}`;
       g.textAlign = 'center';
@@ -451,6 +472,19 @@ function drawMinimap(g, r, world, me, meId) {
     g.fillStyle = colorOf(u.owner).main;
     g.strokeStyle = u.owner === meId ? '#ffffff' : '#2a1a10'; g.lineWidth = 1.4;
     g.beginPath(); g.arc(ox + u.x * k, oy + u.y * k, 3.4, 0, TAU); g.fill(); g.stroke();
+  }
+  const cv = world.caravan;
+  if (cv && cv.state !== 'gone') {
+    const x = ox + cv.x * k, y = oy + cv.y * k;
+    if (cv.ex !== undefined && cv.state === 'rolling') {
+      g.setLineDash([3, 3]); g.strokeStyle = 'rgba(255, 229, 138, 0.55)'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(ox + cv.ex * k, oy + cv.ey * k); g.stroke(); g.setLineDash([]);
+    }
+    const pulse = 6 + 3 * Math.sin(r.frame * 0.15);
+    g.strokeStyle = 'rgba(255, 229, 138, 0.8)'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(x, y, pulse, 0, TAU); g.stroke();
+    g.fillStyle = '#ffd24a'; g.strokeStyle = '#2a1a10'; g.lineWidth = 1.4;
+    g.beginPath(); g.roundRect(x - 4, y - 3, 8, 6, 1.5); g.fill(); g.stroke();
   }
   if (world.shrine) {
     const sx = ox + world.shrine.x * k, sy = oy + world.shrine.y * k;
