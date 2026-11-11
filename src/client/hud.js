@@ -22,7 +22,7 @@ const TRAIN = [
   ['ballista', 'Balliste', 'T', 'Schiet ver; 3,5× schade op draken'],
   ['mage', 'Magiër', 'Z', 'Vuurbal raakt een hele groep'],
   ['healer', 'Genezer', 'X', 'Geneest gewonde troepen'],
-  ['dragon', 'Draak', 'C', 'Elite: vliegt, alleen afstandstroepen raken hem; maximaal 3'],
+  ['dragon', 'Draak', 'C', 'Elite: vliegt, alleen afstandstroepen raken hem'],
 ];
 const NEEDS = { barracks: 'Kazerne', academy: 'Academie' };
 const NOTICES = {

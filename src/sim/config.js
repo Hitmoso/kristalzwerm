@@ -76,8 +76,8 @@ export const UNITS = {
   // Does not fight; mends the most wounded ally nearby.
   healer: { hp: 55, dmg: 0, heal: 18, range: 150, cd: 0.8, speed: 145, radius: 8, supply: 1, cost: 100, train: 4, needs: 'academy' },
   // Flies over buildings and breathes fire in a small area. Only ranged attacks reach it.
-  // Elite: expensive, slow to train, at most MAX_DRAGONS per player, and worth a whole squad.
-  dragon: { hp: 480, dmg: 15, range: 95, cd: 0.7, speed: 165, radius: 18, supply: 5, cost: 500, train: 14, needs: 'academy', splash: 40, flying: true, max: 3 },
+  // Elite: expensive and slow to train, but worth a whole squad.
+  dragon: { hp: 480, dmg: 15, range: 95, cd: 0.7, speed: 165, radius: 18, supply: 5, cost: 500, train: 14, needs: 'academy', splash: 40, flying: true },
 };
 
 export const BUILDINGS = {
