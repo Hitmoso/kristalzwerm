@@ -101,6 +101,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     step(world, DT);
     for (const c of room.clients) {
       for (const e of world.events) {
+        if (c.legacy && (e.owner < 0 || e.type === 'caravan')) continue;
         if (GLOBAL_EVENTS[e.type] || near(c, e.x ?? e.x1, e.y ?? e.y1, 200)) {
           if (c.events.length < 400) c.events.push(e);
         }
@@ -140,6 +141,17 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     return m;
   }
 
+  // minimap dots without the neutral ones, computed at most once per snapshot round
+  let legacyCache = null, legacyFor = null;
+  function legacyMini(mini) {
+    if (legacyFor !== mini) {
+      legacyFor = mini;
+      legacyCache = [];
+      for (let i = 0; i < mini.length; i += 3) if (mini[i] >= 0) legacyCache.push(mini[i], mini[i + 1], mini[i + 2]);
+    }
+    return legacyCache;
+  }
+
   function sendSnapshot(c, world, shared, mini) {
     const me = world.players[c.playerId];
     const king = me.commanderId ? findById(world.units, me.commanderId) : null;
@@ -150,6 +162,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     for (const x of world.units) {
       // Every king is always sent (minimap, name tags); other units only when in view.
       if (x.kind !== 'commander' && !near(c, x.x, x.y, 0)) continue;
+      if (c.legacy && x.owner < 0) continue;
       let flags = 0;
       if (world.time - x.atkAt < 0.25) flags |= F_ATTACK;
       if (world.time - x.hitAt < 0.12) flags |= F_HIT;
@@ -173,21 +186,24 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     };
     // Crystals only change when one is picked up or appears: send the list just then.
     if (c.crystalSig !== shared.sig) { c.crystalSig = shared.sig; msg.c = shared.c; }
-    if (mini) msg.m = mini;
+    if (mini) msg.m = c.legacy ? legacyMini(mini) : mini;
     if (c.events.length) { msg.e = c.events; c.events = []; }
     c.send(msg);
   }
 
   // ---- connection handling ----
   function join(send, hello) {
-    // A page from before the last deploy would misread what we send: turn it away so it reloads.
-    if (hello?.v !== PROTOCOL) { send({ t: 'old', v: PROTOCOL }); return null; }
+    // Pages from before versions existed (no v) may still play: they just never get neutral
+    // units (the caravan), which they cannot draw. A page with a different version is turned
+    // away and reloads itself.
+    const legacy = hello?.v === undefined;
+    if (!legacy && hello.v !== PROTOCOL) { send({ t: 'old', v: PROTOCOL }); return null; }
     if (humans() >= MAX_HUMANS) { send({ t: 'full' }); return null; }
     start();
     const name = cleanName(hello?.name);
     const player = addPlayer(room.world, { name });
     player.admin = !!adminKey && hello?.key === adminKey;
-    const c = { send, playerId: player.id, events: [], crystalSig: NaN, inputs: [], ack: 0, lastIn: 0, debt: 0, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
+    const c = { send, playerId: player.id, legacy, events: [], crystalSig: NaN, inputs: [], ack: 0, lastIn: 0, debt: 0, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
     room.clients.add(c);
     balanceBots();
     send({ t: 'init', v: PROTOCOL, room: code, id: player.id, size: room.world.size, snapHz: 30 / SNAPSHOT_EVERY, admin: player.admin });

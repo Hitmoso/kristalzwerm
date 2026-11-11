@@ -4,6 +4,7 @@ import { createRoom } from '../src/server/room.js';
 import { UNIT_STRIDE, UNIT_KINDS, PROTOCOL } from '../src/net/protocol.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const findKing = (w, id) => w.units.find((u) => u.id === w.players[id].commanderId);
 const fakeClient = (game, hello) => {
   const inbox = [];
   const c = game.join((m) => inbox.push(JSON.parse(JSON.stringify(m))), { v: PROTOCOL, ...hello });
@@ -121,12 +122,31 @@ test('late inputs are caught up exactly, but never faster than real time', async
   assert.ok(steps <= 9 + 8 + 3, `walked ${steps.toFixed(1)} steps`);
 });
 
-test('a page from an older version is turned away so it reloads', () => {
-  const game = createRoom({});
+test('pages without a version still play but never see neutral units; other versions reload', async (t) => {
+  const game = createRoom({ adminKey: 'k' });
+  const oldInbox = [];
+  const old = game.join((m) => oldInbox.push(JSON.parse(JSON.stringify(m))), { name: 'Oud' }); // a page from before versions
+  t.after(() => game.leave(old));
+  assert.ok(old, 'still let in');
+  const admin = fakeClient(game, { name: 'Baas', key: 'k' });
+  t.after(() => game.leave(admin.c));
+  game.receive(admin.c, { t: 'cmd', c: { type: 'caravan' } });
+  game.room.world.caravanTimer = 0;
+  await wait(400);
+  const w = game.room.world;
+  assert.ok(w.caravan, 'a caravan is out');
+  // bring the caravan into the old page's view, and force a minimap round
+  const oldKing = findKing(w, old.playerId);
+  oldKing.x = w.caravan.x + 100; oldKing.y = w.caravan.y;
+  await wait(1200);
+  const snaps = oldInbox.filter((m) => m.t === 's');
+  for (const s of snaps) {
+    for (let i = 0; i < s.u.length; i += UNIT_STRIDE) assert.ok(s.u[i + 1] >= 0, 'no neutral unit sent');
+    if (s.m) for (let i = 0; i < s.m.length; i += 3) assert.ok(s.m[i] >= 0, 'no neutral minimap dot');
+    for (const e of s.e || []) assert.ok(!(e.owner < 0) && e.type !== 'caravan', 'no neutral event');
+  }
+  assert.ok(admin.snaps().some((s) => s.cv), 'a current page does get the caravan');
   const inbox = [];
-  const c = game.join((m) => inbox.push(m), { name: 'Oud' }); // no version: the page from before
-  assert.equal(c, null);
+  assert.equal(game.join((m) => inbox.push(m), { v: 1, name: 'Ander' }), null);
   assert.equal(inbox[0].t, 'old');
-  assert.equal(game.humans(), 0);
-  assert.equal(game.room.timer, null, 'no world was started for it');
 });
