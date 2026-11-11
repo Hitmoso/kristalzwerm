@@ -78,7 +78,9 @@ wss.on('connection', (ws) => {
       if (!client) {
         if (game && game.humans() === 0) rooms.delete(code);
         if (!game) send({ t: 'full' }); // too many rooms; join() explains its own refusals
-        ws.close();
+        ws.close(4000, 'refused');
+        // some proxies (Render's) swallow the close handshake: cut the line so the page notices
+        setTimeout(() => ws.terminate(), 1000);
       }
       return;
     }
