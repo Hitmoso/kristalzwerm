@@ -14,11 +14,12 @@ const MAX_HUMANS = 10;
 const TARGET_PLAYERS = 6;   // bots fill the world up to this many players
 const MIN_BOTS = 2;
 const BOT_LEVELS = ['normal', 'easy', 'hard', 'normal', 'easy', 'normal'];
-const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, boost: 1, order: 1 };
+const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1 };
+const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
 const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 const INPUT_QUEUE = 10;  // inputs buffered per client; older ones are dropped
 const MAX_DEBT = 8;      // ticks of late input we are willing to catch up on
-const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, stance: 1, boost: 1, order: 1 };
+const GLOBAL_EVENTS = { eliminated: 1, spawned: 1, cheat: 1, captured: 1, army: 1, boost: 1, order: 1 };
 
 export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
   const room = { world: null, clients: new Set(), timer: null, snapCount: 0 };
@@ -161,7 +162,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       time: +world.time.toFixed(3),
       you: {
         gold: Math.floor(me.gold), q: me.queue.length, cresp: +me.commanderRespawn.toFixed(1),
-        spawned: +me.spawnedAt.toFixed(2), notice: me.notice, st, hold: me.hold ? 1 : 0,
+        spawned: +me.spawnedAt.toFixed(2), notice: me.notice, st, army: [me.army, me.armyTarget], hold: me.army === 'hold' ? 1 : 0,
         ack: c.ack, boost: me.boost ? 1 : 0, kx: king ? king.x : 0, ky: king ? king.y : 0,
       },
       p: shared.p, b: shared.b, u,
@@ -216,6 +217,12 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       if (!COMMANDS[type]) return;
       if (kind !== undefined && typeof kind !== 'string') return;
       if (kind && !UNITS[kind] && !BUILDING_KINDS.includes(kind)) return;
+      if (type === 'army') {
+        const mode = msg.c.mode, target = msg.c.target;
+        if (!ARMY_MODES[mode] || (target !== undefined && !Number.isSafeInteger(target))) return;
+        queueCommand(room.world, c.playerId, { type, mode, target });
+        return;
+      }
       if (type === 'order') {
         const order = msg.c.order, target = msg.c.target;
         if (!ORDERS[order] || (target !== undefined && !Number.isSafeInteger(target))) return;

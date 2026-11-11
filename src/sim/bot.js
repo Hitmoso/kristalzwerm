@@ -171,7 +171,7 @@ function wantedBuilding(p, st, diff, persona) {
   if (st.mines < maxMines && st.army >= st.mines * 5) return 'mine'; // army first, greed second
   const nearCap = st.supply >= st.cap * diff.armyTarget - 2;
   if (st.barracks < 2 && nearCap) return 'barracks';
-  if (st.barracks < 6 && nearCap && p.gold > 350 && p.difficulty !== 'easy') return 'barracks';
+  if (st.barracks < 10 && nearCap && p.gold > 350 && p.difficulty !== 'easy') return 'barracks';
   if (st.towers < persona.towers && p.gold > 420) return 'tower';
   return null;
 }

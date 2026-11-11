@@ -233,7 +233,7 @@ test('hold stance keeps the army at the castle', () => {
   queueCommand(world, a.id, { type: 'stance' });
   setInput(world, a.id, hq.x > 3250 ? -1 : 1, 0);
   run(world, 5);
-  assert.equal(a.hold, true);
+  assert.equal(a.army, 'hold');
   assert.ok(Math.abs(c.x - hq.x) > 700);
   for (const u of world.units) {
     if (u.owner === a.id && u !== c) assert.ok(Math.hypot(u.x - hq.x, u.y - hq.y) < 260);
@@ -325,13 +325,67 @@ test('the king fells a soldier in two blows', () => {
   assert.ok(UNITS.commander.dmg * 2 >= UNITS.soldier.hp && UNITS.commander.dmg < UNITS.soldier.hp);
 });
 
-test('an army of 100 supply is reachable with six barracks and an academy', () => {
+test('an army of 100 supply needs ten barracks and an academy', () => {
   const world = createWorld({ seed: 2 });
   const p = addPlayer(world, { name: 'Bouwer' });
   const hq = findById(world.buildings, p.hqId);
-  for (let i = 0; i < 6; i++) spawnBuilding(world, p.id, 'barracks', hq.x + 300 + i * 80, hq.y + 400);
+  for (let i = 0; i < 9; i++) spawnBuilding(world, p.id, 'barracks', hq.x + 300 + i * 80, hq.y + 400);
   spawnBuilding(world, p.id, 'academy', hq.x - 300, hq.y + 400);
-  assert.equal(playerStats(world, p.id).cap, 100);
+  assert.equal(playerStats(world, p.id).cap, 20 + 9 * 8 + 6);
   spawnBuilding(world, p.id, 'barracks', hq.x, hq.y + 600);
-  assert.equal(playerStats(world, p.id).cap, 100, 'never above 100');
+  assert.equal(playerStats(world, p.id).cap, 100, 'ten barracks reach the cap, never above');
+});
+
+test('an army sent to an enemy castle fights its way there, and comes home when the target falls', () => {
+  const { world, a, b } = duo();
+  b.shieldUntil = 0;
+  const hqB = findById(world.buildings, b.hqId), ca = findById(world.units, a.commanderId);
+  for (let i = 0; i < 12; i++) spawnUnit(world, a.id, i % 2 ? 'knight' : 'giant', ca.x + i * 6, ca.y + 30);
+  queueCommand(world, a.id, { type: 'army', mode: 'attack', target: a.id }); // not yourself
+  queueCommand(world, a.id, { type: 'army', mode: 'charge' });                // not a mode
+  step(world);
+  assert.equal(a.army, 'follow');
+  // an enemy patrol right on the route: the marching army must fight it, not walk past
+  const mid = { x: (ca.x + hqB.x) / 2, y: (ca.y + hqB.y) / 2 };
+  const patrol = [0, 1, 2].map((i) => spawnUnit(world, b.id, 'soldier', mid.x + i * 10, mid.y));
+  for (const s of patrol) s.ret = true;
+  queueCommand(world, a.id, { type: 'army', mode: 'attack', target: b.id });
+  step(world);
+  assert.equal(a.army, 'attack');
+  let patrolHit = false;
+  for (let i = 0; i < 90 * 30 && b.alive; i++) {
+    step(world);
+    if (patrol.some((s) => s.hp < s.maxHp)) patrolHit = true;
+  }
+  assert.ok(patrolHit, 'the patrol on the way got hit');
+  assert.ok(Math.hypot(ca.x - findById(world.units, a.commanderId).x, 0) < 1, 'the king stayed home');
+  assert.equal(b.alive, false, 'the castle fell');
+  step(world);
+  assert.equal(a.army, 'follow', 'army comes back to the king');
+});
+
+test('you cannot send your army at a castle that is still shielded', () => {
+  const { world, a, b } = duo();
+  b.shieldUntil = world.time + 60;
+  queueCommand(world, a.id, { type: 'army', mode: 'attack', target: b.id });
+  step(world);
+  assert.equal(a.army, 'follow');
+  assert.equal(a.notice.code, 'targetShield');
+});
+
+test('healers keep their distance from enemies but still heal', () => {
+  const { world, a, b, ca } = stage();
+  const healer = spawnUnit(world, a.id, 'healer', ca.x + 40, ca.y + 20);
+  const friend = spawnUnit(world, a.id, 'giant', ca.x + 120, ca.y);
+  friend.hp = 120; friend.ret = false;
+  const enemy = spawnUnit(world, b.id, 'giant', ca.x + 200, ca.y);
+  enemy.ret = true; enemy.cd = 1e9; // stands there, harmless
+  let closest = Infinity, healed = 0;
+  for (let i = 0; i < 90; i++) {
+    step(world);
+    closest = Math.min(closest, Math.hypot(healer.x - enemy.x, healer.y - enemy.y));
+    healed += world.events.filter((e) => e.type === 'heal').length;
+  }
+  assert.ok(healed > 0, 'still heals');
+  assert.ok(closest > 130, `came within ${closest.toFixed(0)} of the enemy`);
 });

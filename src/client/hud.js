@@ -9,9 +9,9 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};
 
 const BUILD = [
   ['mine', 'Mijn', '1', 'Digit1', '+2 goud per seconde'],
-  ['barracks', 'Kazerne', '2', 'Digit2', '+8 leger; schutters, ridders en reuzen'],
+  ['barracks', 'Kazerne', '2', 'Digit2', `+${BUILDINGS.barracks.supply} leger; schutters, ridders, reuzen en ballisten`],
   ['tower', 'Toren', '3', 'Digit3', 'Schiet op vijanden in de buurt'],
-  ['academy', 'Academie', '4', 'Digit4', '+4 leger; magiërs, genezers en draken'],
+  ['academy', 'Academie', '4', 'Digit4', `+${BUILDINGS.academy.supply} leger; magiërs, genezers en draken`],
 ];
 const TRAIN = [
   ['soldier', 'Soldaat', 'Q', 'Goedkoop en stevig'],
@@ -33,6 +33,7 @@ const NOTICES = {
   edge: 'Te dicht bij de rand',
   enemy: 'Te dicht bij een vijandelijke basis',
   commander: 'Je koning is onderweg terug',
+  targetShield: 'Dat kasteel heeft nog een schild',
 };
 
 export function createHud(onAction) {
@@ -41,7 +42,8 @@ export function createHud(onAction) {
     shieldRow: $('shieldRow'), shield: $('shield'),
     board: $('board'), feed: $('feed'), banner: $('banner'), tip: $('tip'),
     build: $('buildGroup'), train: $('trainGroup'),
-    stance: $('stance'), mute: $('mute'), room: $('room'),
+    follow: $('armyFollow'), hold: $('armyHold'), attack: $('armyAttack'), attackMenu: $('attackMenu'), armyState: $('armyState'),
+    mute: $('mute'), room: $('room'),
     buttons: [],
   };
   let lastNoticeAt = -1, lastNoticeCode = '', lastNoticeShown = -99;
@@ -79,13 +81,30 @@ export function createHud(onAction) {
 
   // Called ~10 times per second.
   // `stats` comes from the server when playing online; offline we work it out here.
+  // Pick an enemy castle: every living opponent, strongest score first; shielded ones greyed out.
+  let lastWorld = null, lastMe = null, lastMenu = '';
+  function fillAttackMenu(world, me) {
+    const foes = world.players.filter((p) => p && !p.left && p.alive && p.id !== me.id).sort((a, b) => b.score - a.score);
+    const html = '<p>Val het kasteel aan van</p>' + (foes.length ? foes.map((p) => {
+      const shield = p.shieldUntil > world.time;
+      return `<button data-t="${p.id}" class="${shield ? 'off' : ''}${me.army === 'attack' && me.armyTarget === p.id ? ' on' : ''}"><i style="background:${colorOf(p.id).main}"></i>${esc(p.name)}<small>${shield ? 'schild' : Math.floor(p.score)}</small></button>`;
+    }).join('') : '<p>Geen tegenstanders</p>');
+    if (html !== lastMenu) { el.attackMenu.innerHTML = html; lastMenu = html; }
+  }
+
   const update = (world, me, stats) => {
+    lastWorld = world; lastMe = me;
     const st = stats || playerStats(world, me.id);
     el.gold.textContent = Math.floor(me.gold);
     const heart = world.shrine && world.shrine.owner === me.id ? WORLD.shrineIncome : 0;
     el.income.textContent = heart ? `+${st.income + heart}/s met Kristalhart` : `+${st.income}/s`;
-    el.stance.classList.toggle('on', !!me.hold);
-    el.stance.querySelector('span').textContent = me.hold ? 'Leger bewaakt kasteel' : 'Leger volgt koning';
+    const mode = me.army || 'follow';
+    el.follow.classList.toggle('on', mode === 'follow');
+    el.hold.classList.toggle('on', mode === 'hold');
+    el.attack.classList.toggle('on', mode === 'attack');
+    const foe = world.players[me.armyTarget];
+    el.armyState.lastElementChild.textContent = mode === 'attack' ? `Leger valt ${foe ? foe.name : '?'} aan` : mode === 'hold' ? 'Leger bewaakt je kasteel' : 'Leger volgt je';
+    if (!el.attackMenu.hidden) fillAttackMenu(world, me);
     el.supply.textContent = `${st.supply}/${st.cap}`;
     const training = me.queue.length + world.buildings.reduce((n, b) => n + (b.owner === me.id && b.train ? 1 : 0), 0);
     el.queue.textContent = training ? `${training} in opleiding` : 'leger';
@@ -164,7 +183,22 @@ export function createHud(onAction) {
     }
   };
 
-  el.stance.addEventListener('click', () => { onAction({ type: 'stance' }); el.stance.blur(); });
+  el.follow.addEventListener('click', () => { onAction({ type: 'army', mode: 'follow' }); el.follow.blur(); });
+  el.hold.addEventListener('click', () => { onAction({ type: 'army', mode: 'hold' }); el.hold.blur(); });
+  el.attack.addEventListener('click', (e) => {
+    e.stopPropagation();
+    el.attackMenu.hidden = !el.attackMenu.hidden;
+    if (!el.attackMenu.hidden && lastWorld) fillAttackMenu(lastWorld, lastMe);
+    el.attack.blur();
+  });
+  el.attackMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const b = e.target.closest('button');
+    if (!b || b.classList.contains('off')) return;
+    onAction({ type: 'army', mode: 'attack', target: Number(b.dataset.t) });
+    el.attackMenu.hidden = true;
+  });
+  document.addEventListener('click', () => { el.attackMenu.hidden = true; });
   el.mute.addEventListener('click', () => { onAction({ type: 'mute' }); el.mute.blur(); });
   const setMuted = (m) => { el.mute.querySelector('span').textContent = m ? 'Geluid uit' : 'Geluid aan'; el.mute.classList.toggle('on', m); };
 

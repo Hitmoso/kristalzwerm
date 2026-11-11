@@ -459,6 +459,14 @@ function drawMinimap(g, r, world, me, meId) {
     g.beginPath(); g.moveTo(sx, sy - 6); g.lineTo(sx + 4.5, sy); g.lineTo(sx, sy + 6); g.lineTo(sx - 4.5, sy); g.closePath();
     g.fill(); g.stroke();
   }
+  if (me && me.army === 'attack' && world.players[me.armyTarget]) {
+    const hq = world.buildings.find((b) => b.id === world.players[me.armyTarget].hqId);
+    if (hq) {
+      const x = ox + hq.x * k, y = oy + hq.y * k;
+      g.strokeStyle = '#ffffff'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x - 7, y - 7); g.lineTo(x + 7, y + 7); g.moveTo(x + 7, y - 7); g.lineTo(x - 7, y + 7); g.stroke();
+    }
+  }
   if (me && me.alive && world.time - me.hqHitAt < 2 && r.frame % 20 < 10) {
     const hq = world.buildings.find((b) => b.id === me.hqId);
     if (hq) { g.strokeStyle = '#ff3b2f'; g.lineWidth = 2.5; g.beginPath(); g.arc(ox + hq.x * k, oy + hq.y * k, 11, 0, TAU); g.stroke(); }

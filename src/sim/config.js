@@ -14,7 +14,7 @@ export const WORLD = {
   cheatGold: 1000,
   startSoldiers: 4,
   baseSupply: 20,
-  maxSupply: 100,     // 20 + 6 barracks × 12 + 1 academy × 8 = 100
+  maxSupply: 100,     // 20 + 10 barracks × 8 + academy 6 = 106, capped at 100
   commanderRespawn: 6,
   botRespawn: 4,
   hqBounty: 150,
@@ -56,9 +56,9 @@ export const UNITS = {
 export const BUILDINGS = {
   hq: { hp: 2600, radius: 46, cost: 0, income: 3, dmg: 22, range: 270, cd: 0.5, trains: true },
   mine: { hp: 350, radius: 26, cost: 120, costStep: 40, income: 2 },
-  barracks: { hp: 500, radius: 30, cost: 150, supply: 12, trains: true },
+  barracks: { hp: 500, radius: 30, cost: 150, supply: 8, trains: true },
   tower: { hp: 420, radius: 20, cost: 130, dmg: 16, range: 250, cd: 0.6 },
-  academy: { hp: 450, radius: 30, cost: 220, supply: 8, trains: true },
+  academy: { hp: 450, radius: 30, cost: 220, supply: 6, trains: true },
 };
 
 // turn = how fast the stick follows the plan (rad-ish per second); micro = how well the king

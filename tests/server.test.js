@@ -78,6 +78,7 @@ test('room codes are cleaned and stance reaches the simulation', async () => {
   await wait(250);
   const s = a.snaps().at(-1);
   assert.equal(s.you.hold, 1);
+  assert.deepEqual(s.you.army, ['hold', -1]);
   assert.deepEqual(s.sh, [-1, -1, 0]);
   game.leave(a.c);
 });

@@ -72,7 +72,8 @@ export function connect({ name, key, room, onReady, onClose }) {
     me.commanderRespawn = msg.you.cresp;
     me.spawnedAt = msg.you.spawned;
     me.notice = msg.you.notice;
-    me.hold = !!msg.you.hold;
+    me.army = msg.you.army ? msg.you.army[0] : msg.you.hold ? 'hold' : 'follow';
+    me.armyTarget = msg.you.army ? msg.you.army[1] : -1;
     me.boost = !!msg.you.boost;
     net.botOrder = world.botOrder = msg.bo ? { order: msg.bo[0], target: msg.bo[1] } : null;
     const sh = world.shrine;
@@ -169,7 +170,7 @@ export function connect({ name, key, room, onReady, onClose }) {
     want.x = x * k; want.y = y * k;
   };
 
-  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, target: cmd.target } });
+  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target } });
 
   // Called every animation frame. Returns how far we are between the last two snapshots.
   net.frame = (dt) => {

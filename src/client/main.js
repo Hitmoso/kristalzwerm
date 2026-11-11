@@ -170,6 +170,12 @@ function handleEvents(world, me) {
   hud.events(world, me);
   for (const e of world.events) {
     if (e.type === 'boost' && e.player === me.id) hud.say(e.on ? 'Turbo aan' : 'Turbo uit');
+    if (e.type === 'army' && e.player === me.id) {
+      const t = world.players[e.target];
+      hud.say(e.reason === 'done' ? 'Doel gevallen — je leger volgt je weer'
+        : e.mode === 'attack' ? `Je leger trekt op naar ${t ? t.name : '?'} — je koning en kasteel staan onbewaakt`
+        : e.mode === 'hold' ? 'Je leger bewaakt je kasteel' : 'Je leger volgt je');
+    }
     if (e.type === 'order' && (e.player === me.id || e.reason === 'done')) hud.say(e.reason === 'done' ? 'Doelwit uitgeschakeld — bots spelen weer zelf' : admin.say(e.order, e.target, world, me));
   }
   sfx.fromEvents(world.events, renderer.cam, me.id);

@@ -51,7 +51,8 @@ export function addPlayer(world, { name = 'Speler', isBot = false, difficulty = 
     isBot,
     difficulty,
     alive: false,
-    hold: false, // true = army guards the castle instead of following the king
+    army: 'follow',  // 'follow' the king, 'hold' at the castle, or 'attack' armyTarget's castle
+    armyTarget: -1,
     boost: false, // admin: king walks WORLD.boost times as fast
     left: false,
     admin: false,
@@ -96,7 +97,8 @@ export function resetPlayer(world, player) {
   player.commanderRespawn = 0;
   player.hqHitAt = -999;
   player.notice = null;
-  player.hold = false;
+  player.army = 'follow';
+  player.armyTarget = -1;
   if (player.bot) player.bot = { think: 0, goal: 'gather', tx: spot.x, ty: spot.y, targetPlayer: -1 };
   const hq = spawnBuilding(world, player.id, 'hq', spot.x, spot.y);
   player.hqId = hq.id;

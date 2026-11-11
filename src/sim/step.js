@@ -11,6 +11,9 @@ const GRID_CELL = 120;
 const FOLLOW_SPEED = 215;
 const BUILD_KINDS = { mine: 1, barracks: 1, tower: 1, academy: 1 };
 const BOT_ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
+const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
+const HEALER_SAFE = 175;   // healers step back when an enemy is this close
+const HEALER_BEHIND = 95;  // and otherwise stand this far behind the army, away from the fight
 
 export function step(world, dt = DT) {
   world.events.length = 0;
@@ -23,6 +26,8 @@ export function step(world, dt = DT) {
     byId: new Map(),
     grid: null,
     stats: [],
+    centres: [],  // army centre per player, filled on demand
+    fronts: [],   // direction to the nearest enemy per player, filled on demand
   };
   for (const u of world.units) ctx.byId.set(u.id, u);
   for (const b of world.buildings) ctx.byId.set(b.id, b);
@@ -56,6 +61,16 @@ export function step(world, dt = DT) {
   updateBuildings(ctx);
   collectCrystals(ctx);
   cleanup(ctx);
+
+  // A player's own attack order ends when the target is gone.
+  for (const p of world.players) {
+    if (p.army !== 'attack') continue;
+    const t = world.players[p.armyTarget];
+    if (t && t.alive && !t.left) continue;
+    p.army = 'follow';
+    p.armyTarget = -1;
+    world.events.push({ type: 'army', player: p.id, mode: 'follow', target: -1, reason: 'done' });
+  }
 
   // An attack order ends when its target is gone.
   const ord = world.botOrder;
@@ -98,8 +113,25 @@ function notice(world, p, code) {
 function applyCommand(ctx, p, st, cmd) {
   const world = ctx.world;
   if (cmd.type === 'stance') {
-    p.hold = !p.hold;
-    world.events.push({ type: 'stance', player: p.id, hold: p.hold });
+    // Space: follow <-> guard the castle (from an attack, it calls the army back)
+    p.army = p.army === 'follow' ? 'hold' : 'follow';
+    p.armyTarget = -1;
+    world.events.push({ type: 'army', player: p.id, mode: p.army, target: -1 });
+    return;
+  }
+  if (cmd.type === 'army') {
+    if (!ARMY_MODES[cmd.mode]) return;
+    if (cmd.mode === 'attack') {
+      const t = world.players[cmd.target];
+      if (!Number.isSafeInteger(cmd.target) || !t || t === p || !t.alive || t.left) return;
+      if (t.shieldUntil > world.time) return notice(world, p, 'targetShield');
+      p.army = 'attack';
+      p.armyTarget = t.id;
+    } else {
+      p.army = cmd.mode;
+      p.armyTarget = -1;
+    }
+    world.events.push({ type: 'army', player: p.id, mode: p.army, target: p.armyTarget });
     return;
   }
   if (cmd.type === 'boost') {
@@ -314,6 +346,77 @@ function attack(ctx, u, def, target) {
   });
 }
 
+// Where a healer should stand. Returns false to just keep its formation slot.
+//   1. an enemy is close: step away from it, leaning back toward its own army
+//   2. a friend is hurt just out of reach: walk up until it is in reach, no closer
+//   3. the army is fighting: stand behind its centre, on the side away from the enemy
+function healerSpot(ctx, u, def, anchor, idx, out) {
+  const centre = armyCentre(ctx, u.owner, anchor);
+  const threat = nearestEnemy(ctx, u.x, u.y, HEALER_SAFE, u.owner, false, true);
+  if (threat) {
+    let ax = u.x - threat.x, ay = u.y - threat.y;
+    const ad = Math.hypot(ax, ay) || 1;
+    let bx = centre.x - u.x, by = centre.y - u.y;
+    const bd = Math.hypot(bx, by) || 1;
+    ax /= ad; ay /= ad; bx /= bd; by /= bd;
+    const lean = bd > 140 ? 0.8 : 0.3; // far from friends: get back to them first
+    out.x = u.x + (ax + bx * lean) * 80;
+    out.y = u.y + (ay + by * lean) * 80;
+    return true;
+  }
+  const hurt = woundedNear(ctx, u, 340);
+  if (hurt) {
+    const dx = u.x - hurt.x, dy = u.y - hurt.y, d = Math.hypot(dx, dy) || 1;
+    if (d > def.range * 0.85) {
+      out.x = hurt.x + (dx / d) * def.range * 0.7;
+      out.y = hurt.y + (dy / d) * def.range * 0.7;
+      return true;
+    }
+  }
+  const front = frontOf(ctx, u.owner, centre);
+  if (!front) return false;
+  const side = ((idx % 5) - 2) * 24;
+  out.x = centre.x - front.x * HEALER_BEHIND - front.y * side;
+  out.y = centre.y - front.y * HEALER_BEHIND + front.x * side;
+  return true;
+}
+
+// Centre of a player's fighting units (not king, not healers); cached per tick.
+function armyCentre(ctx, owner, fallback) {
+  let c = ctx.centres[owner];
+  if (c === undefined) {
+    let x = 0, y = 0, n = 0;
+    for (const o of ctx.world.units) {
+      if (o.owner !== owner || o.hp <= 0 || o.kind === 'commander' || UNITS[o.kind].heal) continue;
+      x += o.x; y += o.y; n++;
+    }
+    c = ctx.centres[owner] = n ? { x: x / n, y: y / n } : null;
+  }
+  return c || fallback;
+}
+
+// Unit vector from the army centre toward the nearest enemy (unit or building) within 600.
+function frontOf(ctx, owner, centre) {
+  if (ctx.fronts[owner] !== undefined) return ctx.fronts[owner];
+  const e = nearestEnemy(ctx, centre.x, centre.y, 600, owner, true, true);
+  let f = null;
+  if (e) {
+    const dx = e.x - centre.x, dy = e.y - centre.y, d = Math.hypot(dx, dy) || 1;
+    f = { x: dx / d, y: dy / d };
+  }
+  return (ctx.fronts[owner] = f);
+}
+
+function woundedNear(ctx, u, radius) {
+  let best = null, most = 4;
+  queryGrid(ctx.grid, u.x, u.y, radius, (o) => {
+    if (o.owner !== u.owner || o === u || o.hp <= 0) return;
+    const missing = o.maxHp - o.hp;
+    if (missing > most && Math.hypot(o.x - u.x, o.y - u.y) <= radius) { most = missing; best = o; }
+  });
+  return best;
+}
+
 // Healers mend the most wounded friendly unit in reach.
 function heal(ctx, u, def) {
   let best = null, bestMissing = 4;
@@ -339,6 +442,7 @@ function slotOffset(i, out) {
 }
 
 const _slot = { x: 0, y: 0 };
+const _spot = { x: 0, y: 0 };
 const _pos = { x: 0, y: 0 };
 
 function updateUnits(ctx) {
@@ -380,13 +484,22 @@ function updateUnits(ctx) {
       const idx = slotCount[u.owner] || 0;
       slotCount[u.owner] = idx + 1;
       const cmd = ctx.byId.get(p.commanderId);
-      const anchor = cmd && cmd.hp > 0 && !p.hold ? cmd : ctx.byId.get(p.hqId);
+      const hq = ctx.byId.get(p.hqId);
+      let anchor = cmd && cmd.hp > 0 && p.army === 'follow' ? cmd : hq;
+      let spread = anchor === cmd ? 1 : 1.9;
+      const attacking = p.army === 'attack';
+      if (attacking) {
+        const t = world.players[p.armyTarget];
+        const enemyHq = t ? ctx.byId.get(t.hqId) : null;
+        if (enemyHq) { anchor = enemyHq; spread = 1.7; }
+      }
       slotOffset(idx, _slot);
-      const spread = anchor === cmd ? 1 : 1.9;
       const sx = anchor.x + _slot.x * spread, sy = anchor.y + _slot.y * spread;
       const anchorDist = Math.hypot(anchor.x - u.x, anchor.y - u.y);
 
-      if (u.ret) {
+      if (attacking) {
+        u.ret = false; // marching out: fight whatever is in the way, then keep going
+      } else if (u.ret) {
         if (anchorDist < 180) u.ret = false;
       } else if (anchorDist > WORLD.leashRange) {
         u.ret = true;
@@ -394,8 +507,10 @@ function updateUnits(ctx) {
       }
 
       let target = null;
+      let gx = sx, gy = sy; // where to stand when not fighting
       if (def.heal) {
         if (u.cd <= 0) heal(ctx, u, def);
+        if (!u.ret && healerSpot(ctx, u, def, anchor, idx, _spot)) { gx = _spot.x; gy = _spot.y; }
       } else if (!u.ret) {
         const air = canHitAir(u.kind);
         target = u.targetId ? ctx.byId.get(u.targetId) : null;
@@ -418,7 +533,7 @@ function updateUnits(ctx) {
           vy = (dy / d) * def.speed;
         }
       } else {
-        const dx = sx - u.x, dy = sy - u.y;
+        const dx = gx - u.x, dy = gy - u.y;
         const d = Math.hypot(dx, dy);
         if (d > 3) {
           const sp = Math.min(FOLLOW_SPEED, d * 5);

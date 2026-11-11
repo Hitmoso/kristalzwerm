@@ -188,6 +188,25 @@ kbd {
 }
 #actions button.wide kbd { position: static; }
 #actions button.wide span { font-size: 12.5px; }
+.armyrow { display: flex; gap: 4px; position: relative; }
+#actions .armyrow button { width: 58px; padding: 7px 2px; display: grid; place-items: center; }
+#actions .armyrow button span { font-size: 12px; white-space: nowrap; }
+#actions .armyrow button { width: 60px; }
+#actions .armyrow button.on { background: linear-gradient(#ffe9a8, #ffd24a); }
+#armyState { margin: 0; font-size: 11.5px; font-weight: 700; color: var(--cream); display: flex; align-items: center; gap: 6px; max-width: 182px; }
+#armyState kbd { flex: none; }
+#attackMenu {
+  position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 5; width: 200px; padding: 8px;
+  background: linear-gradient(#4a2f18, #3a2412); border: 3px solid var(--wood-d); border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); display: grid; gap: 5px;
+}
+#attackMenu p { margin: 0 0 2px; color: var(--gold); font: 800 11px/1.2 var(--font); text-transform: uppercase; letter-spacing: 0.08em; }
+#actions #attackMenu button {
+  width: 100%; display: flex; align-items: center; gap: 7px; padding: 6px 8px; justify-content: flex-start;
+}
+#attackMenu i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink); flex: none; }
+#attackMenu small { margin-left: auto; color: #7a6145; font-size: 10.5px; }
+#actions #attackMenu button.off { opacity: 0.55; }
 #actions button.wide.on { background: linear-gradient(#ffe9a8, #ffd24a); }
 #name {
   width: 100%; margin: 0 0 12px; padding: 11px 14px; border-radius: 10px; border: 3px solid var(--ink);

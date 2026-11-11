@@ -19,8 +19,11 @@ Open daarna http://localhost:5173. Vrienden op hetzelfde wifi-netwerk gebruiken 
 | 1 2 3 4 | mijn, kazerne, toren, academie bouwen |
 | Q E R F T Z X C | soldaat, schutter, ridder, reus, balliste, magiër, genezer, draak |
 
-Draken vliegen: soldaten, ridders en reuzen kunnen ze niet raken. Schutters, magiërs, de koning, torens en kastelen wel, en de balliste doet 3,5× schade op draken. Je leger kan groeien tot 100 (zes kazernes en een academie).
+Draken vliegen: soldaten, ridders en reuzen kunnen ze niet raken. Schutters, magiërs, de koning, torens en kastelen wel, en de balliste doet 3,5× schade op draken. Je leger kan groeien tot 100 legerplaatsen: 20 basis, +8 per kazerne en +6 per academie.
+
+Met de knoppen **Volgen**, **Kasteel** en **Aanval** onderaan stuur je je leger: achter je koning aan, bij je kasteel, of naar het kasteel van een tegenstander. Let op: dan staan je koning en kasteel onbewaakt, en zodra je leger een vijandelijk kasteel raakt vervalt je eigen schild.
 | Spatie | leger bij het kasteel laten of meenemen |
+| Aanval-knop | leger naar het kasteel van een tegenstander sturen |
 | M | geluid aan/uit |
 
 ## Adminrechten
