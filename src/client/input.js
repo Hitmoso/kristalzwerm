@@ -22,6 +22,7 @@ const ACTIONS = {
   KeyZ: { type: 'train', kind: 'mage' },
   KeyX: { type: 'train', kind: 'healer' },
   KeyC: { type: 'train', kind: 'dragon' },
+  KeyT: { type: 'train', kind: 'ballista' },
   Space: { type: 'stance' },
   KeyM: { type: 'mute' },
 };

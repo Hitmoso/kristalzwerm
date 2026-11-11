@@ -18,7 +18,7 @@ const PERSONAS = {
   opportunist: { aggression: 1.0, towers: 2, mines: 0, opportunism: 2.2, roam: 0.25, mix: { dragon: 1.8, mage: 1.3, knight: 1.3 } },
 };
 const PERSONA_NAMES = Object.keys(PERSONAS);
-const MIX = [['soldier', 3], ['archer', 3], ['knight', 2], ['giant', 1], ['mage', 2.5], ['healer', 1], ['dragon', 1]];
+const MIX = [['soldier', 3], ['archer', 3], ['knight', 2], ['giant', 1], ['ballista', 0.4], ['mage', 2.5], ['healer', 1], ['dragon', 1]];
 
 const valueOf = (u) => (u.kind === 'commander' ? 90 : UNITS[u.kind].cost) * (0.5 + 0.5 * u.hp / u.maxHp);
 
@@ -149,6 +149,10 @@ function pickUnit(world, st, persona, army) {
     // one healer per eight fighters is plenty; none are useless
     if (kind === 'healer') w = army.healers * 8 < army.count ? base * 2.5 : 0.05;
     if (kind === 'mage' && army.mages * 4 > army.count) w *= 0.3;
+    // answer dragons with ballistas, roughly one per enemy dragon on the map
+    if (kind === 'ballista' && army.enemyDragons > army.ballistas) w = base + 3.5;
+    // dragons are hard to answer with melee: keep a few archers or ballistas around
+    if (kind === 'dragon' && army.enemyBallistas > 2) w *= 0.5;
     weights.push([kind, w]);
     total += w;
   }
@@ -167,7 +171,7 @@ function wantedBuilding(p, st, diff, persona) {
   if (st.mines < maxMines && st.army >= st.mines * 5) return 'mine'; // army first, greed second
   const nearCap = st.supply >= st.cap * diff.armyTarget - 2;
   if (st.barracks < 2 && nearCap) return 'barracks';
-  if (st.barracks < 5 && nearCap && p.gold > 350 && p.difficulty !== 'easy') return 'barracks';
+  if (st.barracks < 6 && nearCap && p.gold > 350 && p.difficulty !== 'easy') return 'barracks';
   if (st.towers < persona.towers && p.gold > 420) return 'tower';
   return null;
 }
@@ -239,7 +243,12 @@ function think(world, p, st, diff, king, hq) {
     let gold = p.gold - (want && p.gold >= wantCost ? wantCost : 0);
     let supply = st.supply;
     const target = st.cap * diff.armyTarget;
-    const army = { count, healers, mages };
+    let enemyDragons = 0, enemyBallistas = 0, ballistas = 0;
+    for (const u of world.units) {
+      if (u.kind === 'dragon' && u.owner !== p.id) enemyDragons++;
+      else if (u.kind === 'ballista') { if (u.owner === p.id) ballistas++; else enemyBallistas++; }
+    }
+    const army = { count, healers, mages, enemyDragons, enemyBallistas, ballistas };
     for (let i = 0; i < 3; i++) {
       let kind = pickUnit(world, st, persona, army);
       if (gold < UNITS[kind].cost && gold >= UNITS.soldier.cost && rand(world) < 0.5) kind = 'soldier';

@@ -69,8 +69,8 @@ export function createRenderer(canvas) {
     for (const e of world.events) {
       if (e.type === 'shot') {
         if (!inView(e.x1, e.y1, 320)) continue;
-        const kind = e.kind === 'mage' ? 'orb' : e.kind === 'dragon' ? 'flame' : 'arrow';
-        const lift = e.kind === 'tower' ? 48 : e.kind === 'hq' ? 70 : e.kind === 'dragon' ? 36 : 16;
+        const kind = e.kind === 'mage' ? 'orb' : e.kind === 'dragon' ? 'flame' : e.kind === 'ballista' ? 'bolt' : 'arrow';
+        const lift = e.kind === 'tower' ? 48 : e.kind === 'hq' ? 70 : e.kind === 'dragon' ? 36 : e.kind === 'ballista' ? 20 : 16;
         const d = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
         fx({ kind, x: e.x1, y: e.y1 - lift, x2: e.x2, y2: e.y2 - 10, t: 0, life: Math.max(0.09, d / 900) });
       } else if (e.type === 'splash') {
@@ -290,10 +290,23 @@ function drawEffects(g, r, frameDt) {
     e.t += frameDt;
     const k = e.t / e.life;
     if (k >= 1) { r.effects[i] = r.effects[r.effects.length - 1]; r.effects.pop(); continue; }
-    if (e.kind === 'arrow' || e.kind === 'orb' || e.kind === 'flame') {
+    if (e.kind === 'arrow' || e.kind === 'bolt' || e.kind === 'orb' || e.kind === 'flame') {
       const x = e.x + (e.x2 - e.x) * k;
-      const y = e.y + (e.y2 - e.y) * k - Math.sin(k * Math.PI) * (e.kind === 'arrow' ? 10 : 0);
-      if (e.kind === 'arrow') {
+      const y = e.y + (e.y2 - e.y) * k - Math.sin(k * Math.PI) * (e.kind === 'arrow' ? 10 : e.kind === 'bolt' ? 4 : 0);
+      if (e.kind === 'bolt') {
+        // heavy ballista bolt: thick shaft, steel head, a pale streak behind it
+        const d = Math.hypot(e.x2 - e.x, e.y2 - e.y) || 1;
+        const ux = (e.x2 - e.x) / d, uy = (e.y2 - e.y) / d;
+        g.lineCap = 'round';
+        g.strokeStyle = 'rgba(255, 255, 255, 0.35)'; g.lineWidth = 5;
+        g.beginPath(); g.moveTo(x - ux * 40, y - uy * 40); g.lineTo(x - ux * 16, y - uy * 16); g.stroke();
+        g.strokeStyle = '#2a1a10'; g.lineWidth = 5;
+        g.beginPath(); g.moveTo(x - ux * 20, y - uy * 20); g.lineTo(x, y); g.stroke();
+        g.strokeStyle = '#b98a55'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(x - ux * 20, y - uy * 20); g.lineTo(x - ux * 3, y - uy * 3); g.stroke();
+        g.fillStyle = '#d6dde5'; g.strokeStyle = '#2a1a10'; g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(x + ux * 6, y + uy * 6); g.lineTo(x - uy * 4, y + ux * 4); g.lineTo(x + uy * 4, y - ux * 4); g.closePath(); g.fill(); g.stroke();
+      } else if (e.kind === 'arrow') {
         const d = Math.hypot(e.x2 - e.x, e.y2 - e.y) || 1;
         const ux = (e.x2 - e.x) / d, uy = (e.y2 - e.y) / d;
         g.lineCap = 'round';

@@ -8,7 +8,7 @@
 // Everything goes through a shared room reverb and a compressor, is panned left/right by
 // where it happened on screen, and gets a small random pitch shift so repeats differ.
 
-const GAP = { hit: 45, thud: 60, arrow: 60, orb: 90, flame: 110, splash: 90, heal: 160, charge: 120, death: 60, crumble: 220, collect: 60, built: 140, ui: 40, refuse: 200 };
+const GAP = { bolt: 90, hit: 45, thud: 60, arrow: 60, orb: 90, flame: 110, splash: 90, heal: 160, charge: 120, death: 60, crumble: 220, collect: 60, built: 140, ui: 40, refuse: 200 };
 
 // ---------------------------------------------------------------- voices
 
@@ -104,6 +104,12 @@ function makeVoices(ac, noise) {
     orb: { reverb: 0.4, play(o, t, v, p) {           // spell cast
       burst(o, t, 'bandpass', 500 * p, 2600, 4, 0.03, 0.22, 0.2 * v);
       bell(o, t + 0.02, 880 * p, 0.3, 0.06 * v, 0.6);
+    } },
+    bolt: { reverb: 0.25, play(o, t, v, p) {         // ballista: wooden thunk, string twang, rush of air
+      thump(o, t, 120 * p, 55, 0.14, 0.45 * v);
+      burst(o, t, 'bandpass', 700 * p, 500, 6, 0.002, 0.07, 0.3 * v);
+      bell(o, t, 210 * p, 0.25, 0.06 * v, 0.3);
+      burst(o, t + 0.02, 'bandpass', 2400 * p, 700, 2, 0.01, 0.18, 0.16 * v);
     } },
     flame: { reverb: 0.25, play(o, t, v, p) {        // dragon breath
       burst(o, t, 'lowpass', 1600 * p, 350, 0.8, 0.04, 0.32, 0.32 * v);
@@ -268,7 +274,7 @@ export function createSfx() {
       const pan = x === undefined ? 0 : (x - cam.x) / 700;
       switch (e.type) {
         case 'hit': play(HEAVY[e.kind] ? 'thud' : 'hit', v * 0.8, pan); break;
-        case 'shot': play(e.kind === 'mage' ? 'orb' : e.kind === 'dragon' ? 'flame' : 'arrow', v, pan); break;
+        case 'shot': play(e.kind === 'mage' ? 'orb' : e.kind === 'dragon' ? 'flame' : e.kind === 'ballista' ? 'bolt' : 'arrow', v, pan); break;
         case 'splash': play('splash', v, pan); break;
         case 'heal': play('heal', v, pan); break;
         case 'charge': play('charge', v, pan); break;

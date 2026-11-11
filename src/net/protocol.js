@@ -1,6 +1,7 @@
 // Wire format shared by server and client. Snapshots use flat number arrays to stay small.
 
-export const UNIT_KINDS = ['commander', 'soldier', 'archer', 'knight', 'giant', 'mage', 'healer', 'dragon'];
+// Append only: snapshots send these as indexes, and old tabs still know the old order.
+export const UNIT_KINDS = ['commander', 'soldier', 'archer', 'knight', 'giant', 'mage', 'healer', 'dragon', 'ballista'];
 export const BUILDING_KINDS = ['hq', 'mine', 'barracks', 'tower', 'academy'];
 
 export const SNAPSHOT_EVERY = 2;   // ticks between snapshots (30 Hz sim → 15 Hz network)

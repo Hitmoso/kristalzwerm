@@ -13,8 +13,8 @@ export const WORLD = {
   startGold: 300,
   cheatGold: 1000,
   startSoldiers: 4,
-  baseSupply: 12,
-  maxSupply: 60,
+  baseSupply: 20,
+  maxSupply: 100,     // 20 + 6 barracks × 12 + 1 academy × 8 = 100
   commanderRespawn: 6,
   botRespawn: 4,
   hqBounty: 150,
@@ -35,27 +35,30 @@ export const WORLD = {
 
 // range = reach beyond the two bodies; `needs` = building that unlocks the unit.
 export const UNITS = {
-  commander: { hp: 450, dmg: 18, range: 150, cd: 0.5, speed: 190, radius: 15, supply: 0, cost: 0, train: 0 },
+  // The king hits hard: two blows fell a soldier.
+  commander: { hp: 520, dmg: 30, range: 150, cd: 0.5, speed: 190, radius: 15, supply: 0, cost: 0, train: 0 },
   soldier: { hp: 60, dmg: 8, range: 8, cd: 0.6, speed: 150, radius: 8, supply: 1, cost: 30, train: 2 },
   archer: { hp: 35, dmg: 10, range: 170, cd: 1.0, speed: 140, radius: 7, supply: 1, cost: 45, train: 3, needs: 'barracks' },
   // Fast cavalry. The first blow after 3 quiet seconds is a charge.
   knight: { hp: 140, dmg: 15, range: 10, cd: 0.8, speed: 200, radius: 11, supply: 2, cost: 80, train: 4, needs: 'barracks', charge: 2.5 },
   // Slow wall-breaker.
   giant: { hp: 340, dmg: 30, range: 12, cd: 1.2, speed: 95, radius: 16, supply: 3, cost: 130, train: 6, needs: 'barracks', buildingMult: 2.5 },
+  // Siege crossbow on wheels: slow and fragile up close, but its bolts tear dragons apart.
+  ballista: { hp: 150, dmg: 12, range: 230, cd: 1.4, speed: 110, radius: 13, supply: 2, cost: 100, train: 5, needs: 'barracks', airMult: 3.5 },
   // Fireball hits everything near the target.
   mage: { hp: 45, dmg: 13, range: 180, cd: 1.5, speed: 130, radius: 8, supply: 2, cost: 95, train: 4.5, needs: 'academy', splash: 55 },
   // Does not fight; mends the most wounded ally nearby.
   healer: { hp: 55, dmg: 0, heal: 14, range: 150, cd: 0.8, speed: 145, radius: 8, supply: 1, cost: 70, train: 4, needs: 'academy' },
-  // Flies over buildings and breathes fire in a small area.
-  dragon: { hp: 280, dmg: 13, range: 95, cd: 0.7, speed: 165, radius: 15, supply: 4, cost: 240, train: 9, needs: 'academy', splash: 45, flying: true },
+  // Flies over buildings and breathes fire in a small area. Only ranged attacks reach it.
+  dragon: { hp: 260, dmg: 13, range: 95, cd: 0.7, speed: 165, radius: 15, supply: 4, cost: 240, train: 9, needs: 'academy', splash: 45, flying: true },
 };
 
 export const BUILDINGS = {
   hq: { hp: 2600, radius: 46, cost: 0, income: 3, dmg: 22, range: 270, cd: 0.5, trains: true },
   mine: { hp: 350, radius: 26, cost: 120, costStep: 40, income: 2 },
-  barracks: { hp: 500, radius: 30, cost: 150, supply: 8, trains: true },
+  barracks: { hp: 500, radius: 30, cost: 150, supply: 12, trains: true },
   tower: { hp: 420, radius: 20, cost: 130, dmg: 16, range: 250, cd: 0.6 },
-  academy: { hp: 450, radius: 30, cost: 220, supply: 4, trains: true },
+  academy: { hp: 450, radius: 30, cost: 220, supply: 8, trains: true },
 };
 
 // turn = how fast the stick follows the plan (rad-ish per second); micro = how well the king

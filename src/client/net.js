@@ -89,6 +89,7 @@ export function connect({ name, key, room, onReady, onClose }) {
       let o = units.get(id);
       if (!o) {
         const kind = UNIT_KINDS[u[i + 2]];
+        if (!UNITS[kind]) continue; // a unit this (older) page does not know yet
         o = { id, owner: u[i + 1], kind, x, y, px: x, py: y, sx: x, sy: y, hp: 0, maxHp: UNITS[kind].hp, fx: 1, fy: 0, atkAt: -999, hitAt: -999, seen: 0 };
         units.set(id, o);
       } else if (Math.abs(x - o.x) + Math.abs(y - o.y) > 400) {
@@ -114,6 +115,7 @@ export function connect({ name, key, room, onReady, onClose }) {
       let o = buildings.get(id);
       if (!o) {
         const kind = BUILDING_KINDS[b[i + 2]];
+        if (!BUILDINGS[kind]) continue;
         o = { id, owner: b[i + 1], kind, x: b[i + 3], y: b[i + 4], hp: 0, maxHp: BUILDINGS[kind].hp, hitAt: -999, train: null, seen: 0 };
         buildings.set(id, o);
       }

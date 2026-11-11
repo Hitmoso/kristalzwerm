@@ -153,7 +153,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       if (world.time - x.atkAt < 0.25) flags |= F_ATTACK;
       if (world.time - x.hitAt < 0.12) flags |= F_HIT;
       if (x.fx < -0.15) flags |= F_LEFT; else if (x.fx > 0.15) flags |= F_RIGHT;
-      u.push(x.id, x.owner, UNIT_KINDS.indexOf(x.kind), Math.round(x.x * 10) / 10, Math.round(x.y * 10) / 10, Math.ceil(x.hp), flags);
+      u.push(x.id, x.owner, UNIT_KINDS.indexOf(x.kind), Math.round(x.x), Math.round(x.y), Math.ceil(x.hp), flags);
     }
     const st = playerStats(world, me.id);
     const msg = {

@@ -17,7 +17,9 @@ Open daarna http://localhost:5173. Vrienden op hetzelfde wifi-netwerk gebruiken 
 |---|---|
 | W A S D of muis ingedrukt | koning sturen |
 | 1 2 3 4 | mijn, kazerne, toren, academie bouwen |
-| Q E R F Z X C | soldaat, schutter, ridder, reus, magiër, genezer, draak |
+| Q E R F T Z X C | soldaat, schutter, ridder, reus, balliste, magiër, genezer, draak |
+
+Draken vliegen: soldaten, ridders en reuzen kunnen ze niet raken. Schutters, magiërs, de koning, torens en kastelen wel, en de balliste doet 3,5× schade op draken. Je leger kan groeien tot 100 (zes kazernes en een academie).
 | Spatie | leger bij het kasteel laten of meenemen |
 | M | geluid aan/uit |
 

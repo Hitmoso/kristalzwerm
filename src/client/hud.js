@@ -18,9 +18,10 @@ const TRAIN = [
   ['archer', 'Schutter', 'E', 'Schiet van afstand'],
   ['knight', 'Ridder', 'R', 'Snel; opent met een stormloop'],
   ['giant', 'Reus', 'F', 'Traag en taai; sloopt gebouwen'],
+  ['ballista', 'Balliste', 'T', 'Schiet ver; 3,5× schade op draken'],
   ['mage', 'Magiër', 'Z', 'Vuurbal raakt een hele groep'],
   ['healer', 'Genezer', 'X', 'Geneest gewonde troepen'],
-  ['dragon', 'Draak', 'C', 'Vliegt en spuwt vuur'],
+  ['dragon', 'Draak', 'C', 'Vliegt; alleen afstandstroepen raken hem'],
 ];
 const NEEDS = { barracks: 'Kazerne', academy: 'Academie' };
 const NOTICES = {
@@ -139,7 +140,7 @@ export function createHud(onAction) {
     const age = world.time - me.spawnedAt;
     if (me.alive && age < 300 && me.score < 2500) {
       if (st.barracks === 0) tip = me.gold >= BUILDINGS.barracks.cost ? 'Druk op 2 voor een Kazerne — groter leger en sterkere troepen' : 'Loop over de gouden kristallen om goud te verzamelen';
-      else if (st.army < 10) tip = 'Train troepen met Q, E, R en F — je leger volgt je en valt vanzelf aan';
+      else if (st.army < 10) tip = 'Train troepen met Q, E, R, F en T — je leger volgt je en valt vanzelf aan';
       else if (st.academy === 0) tip = me.gold >= BUILDINGS.academy.cost ? 'Druk op 4 voor een Academie — magiërs, genezers en draken' : 'Spaar voor een Academie (220 goud) of bouw nog een Mijn (1)';
       else if (shield > 0) tip = 'Je kasteel is beschermd zolang het schild staat — bouw je leger op';
       else if (age < 260) tip = 'Zoek een vijand op de kaart rechtsonder en sloop zijn kasteel';

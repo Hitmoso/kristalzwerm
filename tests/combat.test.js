@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById, spawnUnit,
+  createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById, spawnUnit, spawnBuilding,
   DT, WORLD, UNITS,
 } from '../src/sim/index.js';
 
@@ -289,4 +289,49 @@ test('bots obey an admin order and drop it when the target falls', () => {
   assert.equal(world.botOrder.order, 'home');
   removePlayer(world, me.id);
   assert.equal(world.botOrder, null);
+});
+
+test('melee units cannot touch a dragon, not even one they had already picked', () => {
+  const { world, a, b, ca, cb } = stage();
+  ca.x = 1800; // king 200 away: his own shots cannot reach, his army is not called back
+  const dragon = spawnUnit(world, b.id, 'dragon', 2000, 3060);
+  dragon.ret = true; dragon.cd = 1e9; // a punching bag
+  const melee = ['soldier', 'knight', 'giant'].map((k, i) => spawnUnit(world, a.id, k, 1995 + i * 5, 3080));
+  for (const m of melee) m.targetId = dragon.id;
+  cb.x = 2080; cb.y = 3150; // the enemy king stands still on the ground next to it
+  run(world, 4);
+  assert.equal(dragon.hp, dragon.maxHp, 'the dragon is untouched');
+  assert.ok(cb.hp < cb.maxHp, 'the same units do fight what they can reach');
+  assert.ok(melee.every((m) => m.targetId !== dragon.id));
+});
+
+test('archers can shoot a dragon, and a ballista hits it 3.5 times as hard', () => {
+  const { world, a, b, ca } = stage();
+  ca.x = 1800; ca.y = 2900;
+  const d1 = spawnUnit(world, b.id, 'dragon', 2150, 3060);
+  d1.ret = true; d1.cd = 1e9;
+  const archer = spawnUnit(world, a.id, 'archer', 2000, 3060);
+  run(world, 1.2);
+  assert.ok(d1.hp < d1.maxHp, 'archer hits');
+  d1.hp = 0; archer.hp = 0; step(world);
+  const d2 = spawnUnit(world, b.id, 'dragon', 2150, 3060);
+  d2.ret = true; d2.cd = 1e9;
+  spawnUnit(world, a.id, 'ballista', 2000, 3060);
+  for (let i = 0; i < 40 && d2.hp === d2.maxHp; i++) step(world);
+  assert.equal(d2.maxHp - d2.hp, UNITS.ballista.dmg * UNITS.ballista.airMult);
+});
+
+test('the king fells a soldier in two blows', () => {
+  assert.ok(UNITS.commander.dmg * 2 >= UNITS.soldier.hp && UNITS.commander.dmg < UNITS.soldier.hp);
+});
+
+test('an army of 100 supply is reachable with six barracks and an academy', () => {
+  const world = createWorld({ seed: 2 });
+  const p = addPlayer(world, { name: 'Bouwer' });
+  const hq = findById(world.buildings, p.hqId);
+  for (let i = 0; i < 6; i++) spawnBuilding(world, p.id, 'barracks', hq.x + 300 + i * 80, hq.y + 400);
+  spawnBuilding(world, p.id, 'academy', hq.x - 300, hq.y + 400);
+  assert.equal(playerStats(world, p.id).cap, 100);
+  spawnBuilding(world, p.id, 'barracks', hq.x, hq.y + 600);
+  assert.equal(playerStats(world, p.id).cap, 100, 'never above 100');
 });

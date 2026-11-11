@@ -148,7 +148,7 @@ test('mages need an academy, which also adds supply', () => {
   step(world);
   const st = playerStats(world, me.id);
   assert.equal(st.academy, 1);
-  assert.equal(st.cap, WORLD.baseSupply + 4);
+  assert.equal(st.cap, WORLD.baseSupply + BUILDINGS.academy.supply);
   queueCommand(world, me.id, { type: 'train', kind: 'mage' });
   queueCommand(world, me.id, { type: 'train', kind: 'dragon' });
   step(world);

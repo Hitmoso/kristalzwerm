@@ -329,6 +329,71 @@ const UNIT_ART = {
     },
   },
 
+  // Siege crossbow on a two-wheeled cart, pushed by a crewman in team colours.
+  ballista: {
+    box: [-30, -44, 34, 9],
+    draw(g, c, f) {
+      ground(g, 19, 6, c);
+      const turn = f === 1 ? 0.5 : 0;
+      // crewman behind the cart
+      const cx = -21;
+      ell(g, cx - 2.5, -1.5, 3, 2.1, '#4a2f1b', 1.1);
+      ell(g, cx + 2.5, -1.5 - (f === 1 ? 1.2 : 0), 3, 2.1, '#4a2f1b', 1.1);
+      box(g, cx - 5, -15, 10, 12, 4, c.main);
+      line(g, cx + 3, -11, cx + 10, -12, INK, 3.2);
+      line(g, cx + 3, -11, cx + 10, -12, SKIN, 1.8);
+      ell(g, cx, -20, 5.2, 5, SKIN);
+      dot(g, cx + 1.8, -20.3, 0.9, INK);
+      g.beginPath(); g.arc(cx, -21.5, 5.6, Math.PI * 1.05, -0.05 * Math.PI); g.closePath(); ink(g, c.dark, 1.2);
+      // cart: rear wheel, bed, front wheel
+      const wheel = (x) => {
+        ell(g, x, -6, 7, 7, WOOD_D, 1.5);
+        ell(g, x, -6, 4.6, 4.6, WOOD, 1);
+        for (let i = 0; i < 4; i++) {
+          const a = turn + i * Math.PI / 4;
+          line(g, x - Math.cos(a) * 4.4, -6 - Math.sin(a) * 4.4, x + Math.cos(a) * 4.4, -6 + Math.sin(a) * 4.4, WOOD_D, 1.1);
+        }
+        dot(g, x, -6, 1.5, STEEL);
+      };
+      wheel(-9);
+      box(g, -15, -15, 32, 7, 2, WOOD);
+      line(g, -13, -12, 15, -12, WOOD_D, 0.9);
+      box(g, -4, -15, 4.5, 3.4, 1, STEEL_D, 1);
+      wheel(10);
+      // mount and stock, tilted up a little
+      pivot(g, 3, -17, -0.12, () => {
+        box(g, -14, -3, 32, 5.5, 1.5, WOOD_D);
+        box(g, -14, -3.2, 32, 1.6, 0.8, '#b98a55', 0);
+        // the bow: two thick arms in team colours, swept back
+        const draw = f === 2 ? 0 : 1; // fired: string snaps forward
+        for (const s of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(13, 0);
+          g.quadraticCurveTo(11, s * 9, 5 - draw * 3, s * 17);
+          g.lineCap = 'round'; g.lineWidth = 5.2; g.strokeStyle = INK; g.stroke();
+          g.lineWidth = 3.2; g.strokeStyle = c.main; g.stroke();
+          dot(g, 5 - draw * 3, s * 17, 1.8, STEEL);
+        }
+        // string
+        const back = f === 2 ? 9 : -9;
+        g.beginPath(); g.moveTo(5 - draw * 3, -17); g.lineTo(back, 0); g.lineTo(5 - draw * 3, 17);
+        g.lineWidth = 1; g.strokeStyle = '#f4efe2'; g.stroke();
+        // the bolt, loaded
+        if (f !== 2) {
+          line(g, -9, 0, 22, 0, INK, 3);
+          line(g, -9, 0, 22, 0, WOOD, 1.6);
+          poly(g, [21, -2.6, 27, 0, 21, 2.6], STEEL, 1);
+          poly(g, [-9, 0, -12, -3, -6, 0, -12, 3], c.light, 0.8);
+        }
+        dot(g, 13, 0, 2.2, GOLD);
+      });
+      // little pennant on the back of the cart
+      line(g, -14, -15, -14, -27, INK, 2);
+      line(g, -14, -15, -14, -27, WOOD_D, 1);
+      poly(g, [-14, -27, -6, -25, -14, -22], c.main, 1);
+    },
+  },
+
   commander: {
     box: [-22, -56, 38, 8],
     draw(g, c, f) {

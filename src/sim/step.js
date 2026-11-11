@@ -202,10 +202,17 @@ function radiusOf(e) {
 }
 
 // Nearest enemy (unit or building) whose edge is within `range` of (x, y).
-function nearestEnemy(ctx, x, y, range, owner, withBuildings) {
+// Melee units cannot reach anything that flies; ranged units, kings, towers and castles can.
+export function canHitAir(kind) {
+  const def = UNITS[kind] || BUILDINGS[kind];
+  return !!def && (def.range > 50 || !!def.flying);
+}
+
+function nearestEnemy(ctx, x, y, range, owner, withBuildings, air = true) {
   let best = null, bestD = range;
   queryGrid(ctx.grid, x, y, range + 20, (o) => {
     if (o.owner === owner || o.hp <= 0) return;
+    if (!air && UNITS[o.kind].flying) return;
     const d = Math.hypot(o.x - x, o.y - y) - UNITS[o.kind].radius;
     if (d < bestD) { bestD = d; best = o; }
   });
@@ -292,6 +299,7 @@ function attack(ctx, u, def, target) {
   const world = ctx.world;
   u.cd = def.cd;
   let mult = def.buildingMult && !UNITS[target.kind] ? def.buildingMult : 1;
+  if (def.airMult && UNITS[target.kind] && UNITS[target.kind].flying) mult *= def.airMult;
   if (def.charge && world.time - u.atkAt > 3) {
     mult *= def.charge;
     world.events.push({ type: 'charge', x: target.x, y: target.y, owner: u.owner });
@@ -356,7 +364,7 @@ function updateUnits(ctx) {
         p.facing.x = u.fx = vx / l;
         p.facing.y = u.fy = vy / l;
       }
-      const t = nearestEnemy(ctx, u.x, u.y, def.range + def.radius, u.owner, true);
+      const t = nearestEnemy(ctx, u.x, u.y, def.range + def.radius, u.owner, true, true);
       if (t && u.cd <= 0) {
         u.cd = def.cd;
         u.atkAt = world.time;
@@ -389,10 +397,11 @@ function updateUnits(ctx) {
       if (def.heal) {
         if (u.cd <= 0) heal(ctx, u, def);
       } else if (!u.ret) {
+        const air = canHitAir(u.kind);
         target = u.targetId ? ctx.byId.get(u.targetId) : null;
-        if (target && target.hp <= 0) target = null;
+        if (target && (target.hp <= 0 || (!air && UNITS[target.kind] && UNITS[target.kind].flying))) target = null;
         if (!target || (world.tick + u.id) % 4 === 0) {
-          target = nearestEnemy(ctx, u.x, u.y, WORLD.aggroRange, u.owner, true);
+          target = nearestEnemy(ctx, u.x, u.y, WORLD.aggroRange, u.owner, true, air);
         }
         u.targetId = target ? target.id : 0;
       }
