@@ -172,3 +172,30 @@ test('online: the summary, inheritance, revenge choice and crown reach the playe
   assert.equal(you.rv, pb.id);
   assert.equal(you.inh, 200);
 });
+
+test('online: buying a specialisation goes through and shows on the units', async (t) => {
+  const { spawnBuilding, spawnUnit } = await import('../src/sim/index.js');
+  const { F_SPEC_A, F_SPEC_B } = await import('../src/net/protocol.js');
+  const game = createRoom({});
+  const a = fakeClient(game, { name: 'Smid' });
+  t.after(() => game.leave(a.c));
+  await wait(150);
+  const w = game.room.world, p = w.players[a.c.playerId];
+  const hq = w.buildings.find((x) => x.id === p.hqId);
+  spawnBuilding(w, p.id, 'forge', hq.x + 120, hq.y + 160);
+  p.gold = 1000;
+  game.receive(a.c, { t: 'cmd', c: { type: 'spec', kind: 'soldier', choice: 'b' } });
+  game.receive(a.c, { t: 'cmd', c: { type: 'spec', kind: 'soldier', choice: 'x' } });       // not a side
+  game.receive(a.c, { t: 'cmd', c: { type: 'spec', kind: 'commander', choice: 'a' } });     // not a troop you can specialise
+  await wait(250);
+  const s = a.snaps().at(-1);
+  assert.deepEqual(s.you.sp, { soldier: 'shield' });
+  let seen = 0;
+  for (let i = 0; i < s.u.length; i += UNIT_STRIDE) {
+    if (s.u[i + 1] === p.id && UNIT_KINDS[s.u[i + 2]] === 'soldier') {
+      assert.ok(s.u[i + 6] & F_SPEC_B && !(s.u[i + 6] & F_SPEC_A), 'soldier carries the B flag');
+      seen++;
+    }
+  }
+  assert.ok(seen > 0, 'the starting soldiers are in view');
+});

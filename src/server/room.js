@@ -3,18 +3,18 @@
 
 import {
   createWorld, addPlayer, removePlayer, queueCommand, setInput, playerStats, step, findById, moveKing,
-  DT, UNITS, WORLD, BOT_NAMES,
+  DT, UNITS, WORLD, BOT_NAMES, SPECS, SPEC_DEFS,
 } from '../sim/index.js';
 import {
   UNIT_KINDS, BUILDING_KINDS, SNAPSHOT_EVERY, MINIMAP_EVERY, VIEW_HALF_W, VIEW_HALF_H,
-  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, cleanName, PROTOCOL,
+  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, F_SPEC_A, F_SPEC_B, F_SLOW, F_BURN, cleanName, PROTOCOL,
 } from '../net/protocol.js';
 
 const MAX_HUMANS = 10;
 const TARGET_PLAYERS = 6;   // bots fill the world up to this many players
 const MIN_BOTS = 2;
 const BOT_LEVELS = ['normal', 'easy', 'hard', 'normal', 'easy', 'normal'];
-const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1, caravan: 1 };
+const COMMANDS = { build: 1, train: 1, respawn: 1, cheat: 1, stance: 1, army: 1, boost: 1, order: 1, caravan: 1, spec: 1 };
 const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
 const ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 const INPUT_QUEUE = 10;  // inputs buffered per client; older ones are dropped
@@ -167,6 +167,9 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       if (world.time - x.atkAt < 0.25) flags |= F_ATTACK;
       if (world.time - x.hitAt < 0.12) flags |= F_HIT;
       if (x.fx < -0.15) flags |= F_LEFT; else if (x.fx > 0.15) flags |= F_RIGHT;
+      if (x.spec) flags |= SPEC_DEFS[x.kind][x.spec].side === 'a' ? F_SPEC_A : F_SPEC_B;
+      if (x.slowUntil > world.time) flags |= F_SLOW;
+      if (x.burnUntil > world.time) flags |= F_BURN;
       u.push(x.id, x.owner, UNIT_KINDS.indexOf(x.kind), Math.round(x.x), Math.round(x.y), Math.ceil(x.hp), flags);
     }
     const st = playerStats(world, me.id);
@@ -176,7 +179,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
       you: {
         gold: Math.floor(me.gold), q: me.queue.length, cresp: +me.commanderRespawn.toFixed(1),
         spawned: +me.spawnedAt.toFixed(2), notice: me.notice, st, army: [me.army, me.armyTarget], hold: me.army === 'hold' ? 1 : 0,
-        ack: c.ack, boost: me.boost ? 1 : 0, rv: me.revenge, inh: me.inherited, kx: king ? king.x : 0, ky: king ? king.y : 0,
+        ack: c.ack, boost: me.boost ? 1 : 0, rv: me.revenge, inh: me.inherited, sp: me.specs, kx: king ? king.x : 0, ky: king ? king.y : 0,
       },
       p: shared.p, b: shared.b, u,
       sh: [world.shrine.owner, world.shrine.contender, Math.round(world.shrine.progress * 100)],
@@ -248,6 +251,11 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
         const order = msg.c.order, target = msg.c.target;
         if (!ORDERS[order] || (target !== undefined && !Number.isSafeInteger(target))) return;
         queueCommand(room.world, c.playerId, { type, order, target });
+        return;
+      }
+      if (type === 'spec') {
+        if (!SPECS[kind] || (msg.c.choice !== 'a' && msg.c.choice !== 'b')) return;
+        queueCommand(room.world, c.playerId, { type, kind, choice: msg.c.choice });
         return;
       }
       if (type === 'respawn') { queueCommand(room.world, c.playerId, { type, revenge: msg.c.revenge === true }); return; }

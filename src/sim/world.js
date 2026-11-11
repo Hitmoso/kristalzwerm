@@ -1,7 +1,7 @@
 // World state: plain data plus the functions that create and mutate it.
 // No DOM, no wall clock, no Math.random — safe to run on a server.
 
-import { WORLD, UNITS, BUILDINGS, CARAVAN } from './config.js';
+import { WORLD, UNITS, BUILDINGS, CARAVAN, SPEC_DEFS } from './config.js';
 import { rand, randRange } from './rng.js';
 
 export function createWorld({ seed = 1, size = WORLD.size, cheats = false } = {}) {
@@ -59,6 +59,7 @@ export function addPlayer(world, { name = 'Speler', isBot = false, difficulty = 
     lastKiller: -1,   // who flattened our castle last time
     revenge: -1,      // a player we swore revenge on this life (-1 = none)
     life: null,       // counters for the summary screen, see newLife()
+    specs: {},        // chosen specialisation per troop type: { soldier: 'spear', ... }
     army: 'follow',  // 'follow' the king, 'hold' at the castle, or 'attack' armyTarget's castle
     armyTarget: -1,
     boost: false, // admin: king walks WORLD.boost times as fast
@@ -95,6 +96,7 @@ export function resetPlayer(world, player) {
   player.gold = WORLD.startGold + player.inherited;
   player.life = { kills: 0, buildings: 0, caravans: 0, crystals: 0, peakArmy: 0 };
   player.revenge = -1;
+  player.specs = {}; // specialisations are lost with the castle
   player.score = 0;
   player.kills = 0;
   player.lives += 1;
@@ -151,7 +153,10 @@ export function removePlayer(world, playerId) {
   p.commanderId = 0;
   p.commands.length = 0;
   p.queue.length = 0;
-  for (const u of world.units) if (u.owner === playerId) u.hp = 0;
+  for (const u of world.units) {
+    if (u.owner === playerId) u.hp = 0;
+    if (u.burnBy === playerId) u.burnUntil = 0; // the seat may be reused: no credit for a stranger
+  }
   for (const b of world.buildings) if (b.owner === playerId) b.hp = 0;
 }
 
@@ -189,8 +194,12 @@ export function moveKing(pos, mx, my, mult, dt, buildings, size) {
 }
 
 export function spawnUnit(world, owner, kind, x, y) {
-  const def = UNITS[kind];
+  // a new unit is born with its owner's specialisation for that troop type
+  const owner_ = world.players[owner];
+  const spec = owner_ && owner_.specs ? owner_.specs[kind] : undefined;
+  const def = (spec && SPEC_DEFS[kind] && SPEC_DEFS[kind][spec]) || UNITS[kind];
   const u = {
+    spec: def.spec || null,
     id: world.nextId++,
     owner, kind, x, y, px: x, py: y,
     hp: def.hp, maxHp: def.hp,
@@ -228,7 +237,7 @@ export function setInput(world, playerId, mx, my) {
 }
 
 export function playerStats(world, playerId) {
-  const st = { supply: 0, cap: WORLD.baseSupply, income: 0, army: 0, power: 0, mines: 0, barracks: 0, towers: 0, academy: 0 };
+  const st = { supply: 0, cap: WORLD.baseSupply, income: 0, army: 0, power: 0, mines: 0, barracks: 0, towers: 0, academy: 0, forge: 0 };
   for (const b of world.buildings) {
     if (b.owner !== playerId) continue;
     const def = BUILDINGS[b.kind];
@@ -238,6 +247,7 @@ export function playerStats(world, playerId) {
     else if (b.kind === 'barracks') st.barracks++;
     else if (b.kind === 'tower') st.towers++;
     else if (b.kind === 'academy') st.academy++;
+    else if (b.kind === 'forge') st.forge++;
     if (b.train) st.supply += UNITS[b.train.kind].supply;
   }
   for (const u of world.units) {

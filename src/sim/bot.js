@@ -6,7 +6,7 @@
 //   steer()  every tick: turns the goal into a stick direction — curved turns, walking
 //            around buildings and enemy towers, keeping distance and circling in a fight
 
-import { DIFFICULTY, UNITS, BUILDINGS, WORLD, CARAVAN } from './config.js';
+import { DIFFICULTY, UNITS, BUILDINGS, WORLD, CARAVAN, SPECS } from './config.js';
 
 const RAID_POWER = 850; // army value a bot wants before taking on a caravan escort
 import { rand, randRange } from './rng.js';
@@ -163,6 +163,33 @@ function pickUnit(world, st, persona, army) {
   return 'soldier';
 }
 
+// Taste per temperament: which side of each specialisation a bot leans to.
+const SPEC_TASTE = {
+  aggressor: { soldier: 'a', archer: 'b', knight: 'a', giant: 'b', ballista: 'b', mage: 'a', healer: 'a', dragon: 'a' },
+  turtle: { soldier: 'b', archer: 'a', knight: 'a', giant: 'a', ballista: 'a', mage: 'b', healer: 'b', dragon: 'b' },
+  collector: { soldier: 'a', archer: 'a', knight: 'b', giant: 'b', ballista: 'a', mage: 'b', healer: 'a', dragon: 'a' },
+  opportunist: { soldier: 'b', archer: 'b', knight: 'b', giant: 'a', ballista: 'b', mage: 'a', healer: 'b', dragon: 'b' },
+};
+
+// At the Smidse: specialise the troop type the bot fields most, answering what it runs into.
+function specialise(world, p) {
+  const count = {}, enemy = {};
+  for (const u of world.units) {
+    if (u.owner === p.id) count[u.kind] = (count[u.kind] || 0) + 1;
+    else if (u.owner >= 0) enemy[u.kind] = (enemy[u.kind] || 0) + 1;
+  }
+  let kind = null, most = 2;
+  for (const k of Object.keys(SPECS)) if (!p.specs[k] && (count[k] || 0) > most) { most = count[k]; kind = k; }
+  if (!kind || p.gold < SPECS[kind].cost + 120) return;
+  let side = (SPEC_TASTE[p.persona] || SPEC_TASTE.aggressor)[kind];
+  // counters win over taste when the enemy leans hard one way
+  const e = (k) => enemy[k] || 0;
+  if (kind === 'soldier') side = e('knight') + e('giant') > e('archer') + e('ballista') ? 'a' : 'b';
+  if (kind === 'ballista' && e('dragon') >= 3) side = 'a';
+  if (kind === 'dragon' && e('ballista') >= 3) side = 'b';
+  queueCommand(world, p.id, { type: 'spec', kind, choice: side });
+}
+
 function wantedBuilding(p, st, diff, persona) {
   const maxMines = Math.max(1, diff.maxMines + persona.mines);
   if (st.mines < 1) return 'mine';
@@ -170,6 +197,7 @@ function wantedBuilding(p, st, diff, persona) {
   if (st.mines < 2 && maxMines >= 2) return 'mine';
   if (st.towers < 1 && persona.towers >= 1 && p.difficulty !== 'easy' && p.difficulty !== 'novice') return 'tower';
   if (st.academy < 1 && st.mines >= 2 && st.army >= 10 && p.difficulty !== 'novice') return 'academy';
+  if (st.forge < 1 && st.barracks >= 2 && st.army >= 14 && p.difficulty !== 'novice') return 'forge';
   if (st.mines < maxMines && st.army >= st.mines * 5) return 'mine'; // army first, greed second
   const nearCap = st.supply >= st.cap * diff.armyTarget - 2;
   if (st.barracks < 2 && nearCap) return 'barracks';
@@ -240,6 +268,7 @@ function think(world, p, st, diff, king, hq) {
     bot.build = p.gold >= wantCost ? buildSpot(world, hq, want, bot.buildTries) : null;
   }
 
+  if (st.forge && !want) specialise(world, p);
   const saving = want && st.army >= 5 + 4 * st.mines && p.gold < wantCost + 60;
   if (!saving) {
     let gold = p.gold - (want && p.gold >= wantCost ? wantCost : 0);

@@ -1,6 +1,6 @@
 // One fixed simulation tick. Everything that changes the world happens here.
 
-import { DT, WORLD, UNITS, BUILDINGS, CARAVAN, NEUTRAL } from './config.js';
+import { DT, WORLD, UNITS, BUILDINGS, CARAVAN, NEUTRAL, SPECS, SPEC_DEFS, defOf, SLOW_FACTOR } from './config.js';
 import { buildGrid, queryGrid } from './grid.js';
 import {
   playerStats, buildingCost, resetPlayer, spawnUnit, spawnBuilding, spawnCrystal, pushOutOfBuildings, moveKing,
@@ -10,7 +10,7 @@ import { updateCaravan, spawnCaravan, lootCaravan } from './caravan.js';
 
 const GRID_CELL = 120;
 const FOLLOW_SPEED = 215;
-const BUILD_KINDS = { mine: 1, barracks: 1, tower: 1, academy: 1 };
+const BUILD_KINDS = { mine: 1, barracks: 1, tower: 1, academy: 1, forge: 1 };
 const BOT_ORDERS = { center: 1, attack: 1, home: 1, free: 1 };
 const ARMY_MODES = { follow: 1, hold: 1, attack: 1 };
 const HEALER_SAFE = 175;   // healers step back when an enemy is this close
@@ -170,6 +170,25 @@ function applyCommand(ctx, p, st, cmd) {
     spawnCaravan(world);
     return;
   }
+  if (cmd.type === 'spec') {
+    // Smidse: pick a direction for one troop type, for the rest of this life
+    const s = SPECS[cmd.kind];
+    if (!s || (cmd.choice !== 'a' && cmd.choice !== 'b')) return;
+    if (!st.forge) return notice(world, p, 'forge');
+    if (p.specs[cmd.kind]) return notice(world, p, 'specDone');
+    if (p.gold < s.cost) return notice(world, p, 'gold');
+    p.gold -= s.cost;
+    const id = s[cmd.choice].id, d = SPEC_DEFS[cmd.kind][id];
+    p.specs[cmd.kind] = id;
+    for (const u of world.units) {
+      if (u.owner !== p.id || u.kind !== cmd.kind) continue;
+      u.hp = (u.hp / u.maxHp) * d.hp; // same share of health, new maximum
+      u.maxHp = d.hp;
+      u.spec = id;
+    }
+    world.events.push({ type: 'spec', player: p.id, kind: cmd.kind, spec: id });
+    return;
+  }
   if (cmd.type === 'cheat') {
     if (!world.cheats && !p.admin) return;
     p.gold += WORLD.cheatGold;
@@ -215,6 +234,7 @@ function applyCommand(ctx, p, st, cmd) {
     if (cmd.kind === 'mine') st.mines++;
     else if (cmd.kind === 'barracks') st.barracks++;
     else if (cmd.kind === 'academy') st.academy++;
+    else if (cmd.kind === 'forge') st.forge++;
     else st.towers++;
     st.cap = Math.min(WORLD.maxSupply, st.cap + (def.supply || 0));
     st.income += def.income || 0;
@@ -287,12 +307,18 @@ function dealDamage(ctx, attacker, target, amount, quiet) {
     const atk = world.players[attacker.owner];
     if (atk && atk.shieldUntil > world.time) atk.shieldUntil = world.time;
   }
+  const atkDef = UNITS[attacker.kind] ? defOf(attacker) : BUILDINGS[attacker.kind];
+  const ranged = atkDef.range > 50;
+  if (UNITS[target.kind]) {
+    const tdef = defOf(target);
+    if (tdef.rangedResist && ranged) amount *= 1 - tdef.rangedResist;
+    if (tdef.ballistaResist && attacker.kind === 'ballista') amount *= 1 - tdef.ballistaResist;
+  }
   target.hp -= amount;
   target.hitAt = world.time;
   target.hitBy = attacker.owner;
   const isBuilding = !UNITS[target.kind];
   if (isBuilding && target.kind === 'hq') world.players[target.owner].hqHitAt = world.time;
-  const ranged = (UNITS[attacker.kind] || BUILDINGS[attacker.kind]).range > 50;
   if (quiet) {
     // splash victim: the splash event already shows it
   } else if (ranged) {
@@ -325,7 +351,7 @@ function moveNeutral(ctx, u, def) {
     if (d < 40) { cv.arrived = true; return; }
     let mx = dx / d, my = dy / d;
     // something in the way (a castle on the route): veer around it on a fixed side
-    const step = def.speed * dt;
+    const step = def.speed * dt * (u.slowUntil > world.time ? SLOW_FACTOR : 1);
     pushOutOfBuildings(world.buildings, u.x + mx * step, u.y + my * step, def.radius, _pos);
     if (Math.hypot(_pos.x - u.x, _pos.y - u.y) < step * 0.6) {
       const s = cv.side;
@@ -364,8 +390,9 @@ function moveNeutral(ctx, u, def) {
         u.fx = dx / d; u.fy = dy / d;
       }
     }
-    nx = u.x + vx * dt;
-    ny = u.y + vy * dt;
+    const slow = u.slowUntil > world.time ? SLOW_FACTOR : 1;
+    nx = u.x + vx * dt * slow;
+    ny = u.y + vy * dt * slow;
   }
   if (!def.flying) {
     pushOutOfBuildings(world.buildings, nx, ny, def.radius, _pos);
@@ -432,17 +459,21 @@ function attack(ctx, u, def, target) {
   u.cd = def.cd;
   let mult = def.buildingMult && !UNITS[target.kind] ? def.buildingMult : 1;
   if (def.airMult && UNITS[target.kind] && UNITS[target.kind].flying) mult *= def.airMult;
-  if (def.charge && world.time - u.atkAt > 3) {
+  if (def.bigMult && (target.kind === 'knight' || target.kind === 'giant')) mult *= def.bigMult;
+  u.blows = (u.blows || 0) + 1;
+  const charging = def.charge && (def.chargeEvery ? u.blows % def.chargeEvery === 0 || world.time - u.atkAt > 3 : world.time - u.atkAt > 3);
+  if (charging) {
     mult *= def.charge;
     world.events.push({ type: 'charge', x: target.x, y: target.y, owner: u.owner });
   }
   u.atkAt = world.time;
   dealDamage(ctx, u, target, def.dmg * mult);
+  onHit(world, u, def, target);
   if (!def.splash) return;
   world.events.push({ type: 'splash', kind: u.kind, x: target.x, y: target.y, r: def.splash, owner: u.owner });
   queryGrid(ctx.grid, target.x, target.y, def.splash + 20, (o) => {
     if (o === target || o.owner === u.owner || o.hp <= 0) return;
-    if (Math.hypot(o.x - target.x, o.y - target.y) <= def.splash + UNITS[o.kind].radius) dealDamage(ctx, u, o, def.dmg, true);
+    if (Math.hypot(o.x - target.x, o.y - target.y) <= def.splash + UNITS[o.kind].radius) { dealDamage(ctx, u, o, def.dmg, true); onHit(world, u, def, o); }
   });
 }
 
@@ -517,19 +548,62 @@ function woundedNear(ctx, u, radius) {
   return best;
 }
 
+// Lasting effects of a hit: ice slows (never a king: his movement must stay predictable), fire burns.
+function onHit(world, u, def, target) {
+  if (!UNITS[target.kind] || target.hp <= 0) return;
+  if (def.slow && target.kind !== 'commander') target.slowUntil = world.time + def.slow;
+  if (def.burn) {
+    target.burnUntil = world.time + def.burn;
+    target.burnDps = def.burnDps;
+    target.burnBy = u.owner;
+  }
+}
+
+// Fire keeps eating at a unit; it goes through dealDamage so the kill is credited properly.
+const _burner = { owner: 0, kind: 'dragon', x: 0, y: 0 };
+function burnTick(ctx, u) {
+  if (!(u.burnUntil > ctx.world.time)) return;
+  u.burnAcc = (u.burnAcc || 0) + ctx.dt;
+  if (u.burnAcc < 0.5) return;
+  u.burnAcc -= 0.5;
+  _burner.owner = u.burnBy; _burner.x = u.x; _burner.y = u.y;
+  dealDamage(ctx, _burner, u, u.burnDps * 0.5, true);
+}
+
 // Healers mend the most wounded friendly unit in reach.
 function heal(ctx, u, def) {
-  let best = null, bestMissing = 4;
+  const world = ctx.world;
+  if (def.aura) {
+    // Kruidenvrouw: a little for everyone around her
+    let any = false;
+    queryGrid(ctx.grid, u.x, u.y, def.aura, (o) => {
+      if (o.owner !== u.owner || o.hp <= 0 || o.hp >= o.maxHp) return;
+      if (Math.hypot(o.x - u.x, o.y - u.y) > def.aura) return;
+      o.hp = Math.min(o.maxHp, o.hp + def.heal);
+      any = true;
+    });
+    u.cd = any ? def.cd : 0.3;
+    if (any) { u.atkAt = world.time; world.events.push({ type: 'aura', x: u.x, y: u.y, r: def.aura, owner: u.owner }); }
+    return;
+  }
+  // the n most wounded allies in reach (a priest heals two)
+  const n = def.healTargets || 1;
+  const picks = [];
   queryGrid(ctx.grid, u.x, u.y, def.range, (o) => {
     if (o.owner !== u.owner || o === u || o.hp <= 0) return;
     const missing = o.maxHp - o.hp;
-    if (missing > bestMissing && Math.hypot(o.x - u.x, o.y - u.y) <= def.range) { bestMissing = missing; best = o; }
+    if (missing <= 4 || Math.hypot(o.x - u.x, o.y - u.y) > def.range) return;
+    picks.push(o);
+    picks.sort((a, b) => (b.maxHp - b.hp) - (a.maxHp - a.hp));
+    if (picks.length > n) picks.pop();
   });
-  if (!best) { u.cd = 0.25; return; }
+  if (!picks.length) { u.cd = 0.25; return; }
   u.cd = def.cd;
-  u.atkAt = ctx.world.time;
-  best.hp = Math.min(best.maxHp, best.hp + def.heal);
-  ctx.world.events.push({ type: 'heal', x1: u.x, y1: u.y, x: best.x, y: best.y, owner: u.owner });
+  u.atkAt = world.time;
+  for (const best of picks) {
+    best.hp = Math.min(best.maxHp, best.hp + def.heal);
+    world.events.push({ type: 'heal', x1: u.x, y1: u.y, x: best.x, y: best.y, owner: u.owner });
+  }
 }
 
 function slotOffset(i, out) {
@@ -556,7 +630,9 @@ function updateUnits(ctx) {
     u.px = u.x;
     u.py = u.y;
     u.cd -= dt;
-    const def = UNITS[u.kind];
+    const def = defOf(u);
+    burnTick(ctx, u);
+    if (u.hp <= 0) continue;
     if (u.owner === NEUTRAL) { moveNeutral(ctx, u, def); continue; }
     const p = world.players[u.owner];
     let vx = 0, vy = 0;
@@ -651,6 +727,8 @@ function updateUnits(ctx) {
       moveKing(u, p.input.mx, p.input.my, p.boost ? WORLD.boost : 1, dt, world.buildings, world.size);
       continue;
     }
+
+    if (u.slowUntil > world.time) { vx *= SLOW_FACTOR; vy *= SLOW_FACTOR; }
 
     // Separation: push overlapping units apart.
     let ox = 0, oy = 0;

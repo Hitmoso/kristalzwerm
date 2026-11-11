@@ -1,6 +1,6 @@
 // DOM HUD: resources, action buttons, scoreboard, messages, tips.
 
-import { UNITS, BUILDINGS, WORLD, playerStats, buildingCost } from '../sim/index.js';
+import { UNITS, BUILDINGS, WORLD, SPECS, playerStats, buildingCost } from '../sim/index.js';
 import { colorOf } from './render.js';
 import { iconUrl } from './sprites.js';
 
@@ -12,6 +12,7 @@ const BUILD = [
   ['barracks', 'Kazerne', '2', 'Digit2', `+${BUILDINGS.barracks.supply} leger; schutters, ridders, reuzen en ballisten`],
   ['tower', 'Toren', '3', 'Digit3', 'Schiet op vijanden in de buurt'],
   ['academy', 'Academie', '4', 'Digit4', `+${BUILDINGS.academy.supply} leger; magiërs, genezers en draken`],
+  ['forge', 'Smidse', '5', 'Digit5', 'Specialiseer je troepen: klik daarna op ★ bij een troep'],
 ];
 const TRAIN = [
   ['soldier', 'Soldaat', 'Q', 'Goedkoop en stevig'],
@@ -34,6 +35,8 @@ const NOTICES = {
   enemy: 'Te dicht bij een vijandelijke basis',
   commander: 'Je koning is onderweg terug',
   targetShield: 'Dat kasteel heeft nog een schild',
+  forge: 'Bouw eerst een Smidse (5)',
+  specDone: 'Die troep is al gespecialiseerd',
 };
 
 export function createHud(onAction) {
@@ -41,7 +44,7 @@ export function createHud(onAction) {
     hud: $('hud'), gold: $('gold'), income: $('income'), supply: $('supply'), queue: $('queue'),
     shieldRow: $('shieldRow'), shield: $('shield'),
     board: $('board'), feed: $('feed'), banner: $('banner'), tip: $('tip'),
-    build: $('buildGroup'), train: $('trainGroup'),
+    build: $('buildGroup'), train: $('trainGroup'), specMenu: $('specMenu'),
     follow: $('armyFollow'), hold: $('armyHold'), attack: $('armyAttack'), attackMenu: $('attackMenu'), armyState: $('armyState'),
     mute: $('mute'), room: $('room'),
     buttons: [],
@@ -55,8 +58,12 @@ export function createHud(onAction) {
     b.dataset.cmd = cmd;
     b.dataset.kind = kind;
     b.title = `${name} — ${cmd === 'build' ? BUILD.find((x) => x[0] === kind)[4] : hint}`;
-    b.innerHTML = `<kbd>${key}</kbd><img alt="" src="${iconUrl(kind, mine)}"><span>${name}</span><i></i>`;
-    b.addEventListener('click', () => { onAction({ type: cmd, kind }); b.blur(); });
+    const star = cmd === 'train' && SPECS[kind] ? '<b class="star" title="Specialiseren" hidden>★</b>' : '';
+    b.innerHTML = `<kbd>${key}</kbd><img alt="" src="${iconUrl(kind, mine)}"><span>${name}</span>${star}<i></i>`;
+    b.addEventListener('click', (e) => {
+      if (e.target.classList.contains('star')) { e.stopPropagation(); openSpecMenu(kind); b.blur(); return; }
+      onAction({ type: cmd, kind }); b.blur();
+    });
     group.append(b);
     el.buttons.push(b);
   };
@@ -92,8 +99,40 @@ export function createHud(onAction) {
     if (html !== lastMenu) { el.attackMenu.innerHTML = html; lastMenu = html; }
   }
 
+  // Specialisation menu: the two directions for one troop type, with their look and price.
+  const specName = (kind, id) => (SPECS[kind].a.id === id ? SPECS[kind].a.name : SPECS[kind].b.name);
+  let specKind = null;
+  function openSpecMenu(kind) {
+    specKind = kind;
+    el.specMenu.hidden = false;
+    fillSpecMenu();
+  }
+  function fillSpecMenu() {
+    if (!specKind || el.specMenu.hidden || !lastMe) return;
+    const s = SPECS[specKind], me = lastMe, chosen = me.specs && me.specs[specKind];
+    const unitName = TRAIN.find((t) => t[0] === specKind)[1];
+    const card = (side) => {
+      const o = s[side], picked = chosen === o.id, other = chosen && !picked;
+      const afford = me.gold >= s.cost;
+      return `<button data-side="${side}" class="${picked ? 'on' : ''}${other || (!chosen && !afford) ? ' off' : ''}"${chosen ? ' disabled' : ''}>
+        <img alt="" src="${iconUrl(specKind, mine, o.id)}"><span><b>${o.name}</b><small>${o.desc}</small></span>
+        <i>${picked ? 'gekozen' : other ? '—' : s.cost}</i></button>`;
+    };
+    const html = `<p>${unitName} specialiseren${chosen ? '' : ' — kies één, voor de rest van dit leven'}</p>${card('a')}${card('b')}`;
+    if (html !== el.specMenu.dataset.html) { el.specMenu.innerHTML = html; el.specMenu.dataset.html = html; }
+  }
+  el.specMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const b = e.target.closest('button');
+    if (!b || b.disabled || b.classList.contains('off')) return;
+    onAction({ type: 'spec', kind: specKind, choice: b.dataset.side });
+    el.specMenu.hidden = true;
+  });
+  document.addEventListener('click', () => { el.specMenu.hidden = true; });
+
   const update = (world, me, stats) => {
     lastWorld = world; lastMe = me;
+    fillSpecMenu();
     const st = stats || playerStats(world, me.id);
     el.gold.textContent = Math.floor(me.gold);
     const heart = world.shrine && world.shrine.owner === me.id ? WORLD.shrineIncome : 0;
@@ -124,6 +163,15 @@ export function createHud(onAction) {
         full = st.supply + def.supply > st.cap;
       }
       b.lastElementChild.textContent = locked || (full ? 'vol' : cost);
+      const star = b.querySelector('.star');
+      if (star) {
+        const chosen = me.specs && me.specs[kind];
+        star.hidden = !st.forge;
+        star.classList.toggle('done', !!chosen);
+        star.title = chosen ? `Gespecialiseerd: ${specName(kind, chosen)}` : 'Specialiseren';
+        const img = b.querySelector('img');
+        if (img.dataset.spec !== (chosen || '')) { img.dataset.spec = chosen || ''; img.src = iconUrl(kind, mine, chosen || undefined); }
+      }
       b.classList.toggle('off', !!locked || full || me.gold < cost);
       b.classList.toggle('locked', !!locked);
     }
@@ -172,6 +220,7 @@ export function createHud(onAction) {
   const events = (world, me) => {
     for (const e of world.events) {
       if (e.type === 'cheat' && e.player === me.id) say(`Geheime schatkist geopend: +${e.gold} goud`);
+      if (e.type === 'spec' && e.player === me.id) say(`${TRAIN.find((t) => t[0] === e.kind)[1]}: ${specName(e.kind, e.spec)}!`);
       if (e.type === 'caravan') {
         if (e.phase === 'spawn') say('Een goudkaravaan trekt door het land — zie de kaart rechtsonder');
         else if (e.phase === 'escaped') say('De goudkaravaan is ontsnapt');

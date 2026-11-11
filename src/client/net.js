@@ -8,10 +8,10 @@
 // position and replay the inputs the server has not used yet. Any leftover difference is
 // faded out over ~100 ms instead of snapping, so the king never yanks back.
 
-import { UNITS, BUILDINGS, WORLD, DT, moveKing } from '../sim/index.js';
+import { UNITS, BUILDINGS, WORLD, DT, moveKing, SPECS, SPEC_DEFS } from '../sim/index.js';
 import {
   UNIT_KINDS, BUILDING_KINDS, UNIT_STRIDE, BUILDING_STRIDE, CRYSTAL_STRIDE,
-  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, PROTOCOL,
+  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, F_SPEC_A, F_SPEC_B, F_SLOW, F_BURN, PROTOCOL,
 } from '../net/protocol.js';
 
 export function connect({ name, key, room, onReady, onClose }) {
@@ -88,6 +88,7 @@ export function connect({ name, key, room, onReady, onClose }) {
     me.armyTarget = msg.you.army ? msg.you.army[1] : -1;
     me.boost = !!msg.you.boost;
     me.revenge = msg.you.rv ?? -1;
+    me.specs = msg.you.sp || {};
     me.inherited = msg.you.inh || 0;
     world.leader = msg.ld ?? -1;
     net.botOrder = world.botOrder = msg.bo ? { order: msg.bo[0], target: msg.bo[1] } : null;
@@ -120,6 +121,12 @@ export function connect({ name, key, room, onReady, onClose }) {
       if (flags & F_LEFT) o.fx = -1; else if (flags & F_RIGHT) o.fx = 1;
       if (flags & F_ATTACK) { if (world.time - o.atkAt > 0.3) o.atkAt = world.time; }
       if (flags & F_HIT) o.hitAt = world.time;
+      // specialisation (look and max health) and lasting effects
+      const side = flags & F_SPEC_A ? 'a' : flags & F_SPEC_B ? 'b' : null;
+      const spec = side && SPECS[o.kind] ? SPECS[o.kind][side].id : null;
+      if (spec !== (o.spec || null)) { o.spec = spec; o.maxHp = spec ? SPEC_DEFS[o.kind][spec].hp : UNITS[o.kind].hp; }
+      o.slowUntil = flags & F_SLOW ? world.time + 0.3 : 0;
+      o.burnUntil = flags & F_BURN ? world.time + 0.3 : 0;
       o.seen = seq;
       world.units.push(o);
     }
@@ -186,7 +193,7 @@ export function connect({ name, key, room, onReady, onClose }) {
     want.x = x * k; want.y = y * k;
   };
 
-  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target, revenge: cmd.revenge } });
+  net.command = (cmd) => send({ t: 'cmd', c: { type: cmd.type, kind: cmd.kind, order: cmd.order, mode: cmd.mode, target: cmd.target, revenge: cmd.revenge, choice: cmd.choice } });
 
   // Called every animation frame. Returns how far we are between the last two snapshots.
   net.frame = (dt) => {

@@ -659,6 +659,43 @@ const BUILDING_ART = {
     },
   },
 
+  // Smidse: stone workshop with a glowing forge, a chimney and an anvil out front.
+  forge: {
+    box: [-40, -78, 40, 18],
+    draw(g, c) {
+      ell(g, 0, 3, 35, 12, 'rgba(20,30,10,0.25)', 0);
+      // chimney with smoke
+      box(g, 12, -66, 11, 40, 2, STONE_D);
+      bricks(g, 12, -66, 11, 40);
+      box(g, 10, -70, 15, 6, 1.5, STONE_D);
+      for (const [x, y, r] of [[19, -74, 4], [23, -78, 5], [28, -80, 4]]) dot(g, x, y, r, 'rgba(230, 230, 230, 0.75)');
+      // walls
+      box(g, -27, -30, 50, 38, 3, STONE);
+      bricks(g, -27, -30, 50, 38);
+      g.fillStyle = 'rgba(60,50,30,0.16)'; g.fillRect(6, -30, 17, 38);
+      // roof in team colour
+      poly(g, [-31, -28, -22, -48, 18, -48, 27, -28], c.main);
+      poly(g, [4, -48, 18, -48, 27, -28, 10, -28], c.dark, 0);
+      poly(g, [-31, -28, -22, -48, 18, -48, 27, -28], null, 1.5);
+      // forge mouth with fire
+      g.beginPath(); g.moveTo(-20, 6); g.lineTo(-20, -10); g.arc(-12, -10, 8, Math.PI, 0); g.lineTo(-4, 6); g.closePath(); ink(g, '#2a1408');
+      dot(g, -12, -2, 7, 'rgba(255, 140, 40, 0.55)');
+      poly(g, [-17, 4, -14, -6, -12, -1, -10, -9, -7, 4], '#ffb43a', 0);
+      poly(g, [-15, 4, -12, -3, -9, 4], '#fff0a0', 0);
+      // anvil and hammer out front
+      poly(g, [4, -1, 22, -1, 19, 3, 7, 3], STEEL_D, 1.3);
+      box(g, 3, -6, 21, 5, 1.5, STEEL, 1.3);
+      poly(g, [24, -6, 30, -4.5, 24, -2], STEEL, 1.1);
+      box(g, 10, 3, 6, 5, 1, STEEL_D, 1.1);
+      line(g, 6, -9, 14, -16, WOOD_D, 2.4);
+      box(g, 12, -20, 6, 5, 1, STEEL_D, 1);
+      // crossed hammer sign
+      dot(g, -2, -38, 6, c.light);
+      g.lineWidth = 1.4; g.strokeStyle = INK; g.beginPath(); g.arc(-2, -38, 6, 0, TAU); g.stroke();
+      line(g, -5.5, -35, 1.5, -41.5, WOOD_D, 1.6); line(g, 1.5, -35, -5.5, -41.5, WOOD_D, 1.6);
+    },
+  },
+
   academy: {
     box: [-40, -92, 40, 18],
     draw(g, c) {
@@ -693,7 +730,7 @@ const BUILDING_ART = {
 };
 
 // ---------- sprite cache ----------
-function render(art, col, frame, flip, mode) {
+function render(art, col, frame, flip, mode, spec) {
   const [x0, y0, x1, y1] = art.box;
   const w = x1 - x0, h = y1 - y0;
   const cv = document.createElement('canvas');
@@ -705,6 +742,7 @@ function render(art, col, frame, flip, mode) {
   if (flip) { g.translate(w, 0); g.scale(-1, 1); }
   g.translate(-x0, -y0);
   art.draw(g, col, frame);
+  if (spec && SPEC_ART[spec]) SPEC_ART[spec](g, col, frame);
   if (mode === 'white') {
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-in';
@@ -715,10 +753,10 @@ function render(art, col, frame, flip, mode) {
   return { cv, w, h, dx: flip ? -x1 : x0, dy: y0 };
 }
 
-export function unitSprite(kind, col, frame, flip, white) {
-  const key = `${kind}|${white ? 'w' : col.main}|${frame}|${flip ? 1 : 0}`;
+export function unitSprite(kind, col, frame, flip, white, spec) {
+  const key = `${kind}|${spec || ''}|${white ? 'w' : col.main}|${frame}|${flip ? 1 : 0}`;
   let s = cache.get(key);
-  if (!s) cache.set(key, (s = render(UNIT_ART[kind], col, frame, flip, white ? 'white' : '')));
+  if (!s) cache.set(key, (s = render(UNIT_ART[kind], col, frame, flip, white ? 'white' : '', spec)));
   return s;
 }
 
@@ -730,8 +768,8 @@ export function buildingSprite(kind, col, white) {
 }
 
 // A model as an image URL, for HUD buttons.
-export function iconUrl(kind, col) {
-  const s = UNIT_ART[kind] ? unitSprite(kind, col, 0, false, false) : buildingSprite(kind, col, false);
+export function iconUrl(kind, col, spec) {
+  const s = UNIT_ART[kind] ? unitSprite(kind, col, 0, false, false, spec) : buildingSprite(kind, col, false);
   return s.cv.toDataURL();
 }
 
@@ -878,5 +916,114 @@ export function groundTile(kind) {
 }
 
 export const SPRITE_RES = RES;
+// ---------- specialisation overlays ----------
+// Drawn on top of the base model, in the same facing-right coordinates, so every
+// specialised troop is recognisable at a glance (also on the other team).
+const ORB = [[11.5, -33], [11.5, -33], [20, -31]]; // where the mage/healer staff tip is per frame
+function flame(g, x, y, s) {
+  poly(g, [x - s, y, x - s * 0.5, y - s * 1.6, x, y - s * 0.8, x + s * 0.4, y - s * 2, x + s, y], '#ff8a2b', 1);
+  poly(g, [x - s * 0.5, y, x, y - s, x + s * 0.5, y], '#ffe066', 0);
+}
+const SPEC_ART = {
+  spear(g, c, f) {                       // long spear held high
+    const r = f === 2 ? 3 : 0;
+    line(g, -3 + r, 2, 15 + r, -40, INK, 3.4);
+    line(g, -3 + r, 2, 15 + r, -40, WOOD, 1.8);
+    poly(g, [13 + r, -38, 17 + r, -48, 18.5 + r, -37], STEEL, 1.2);
+    line(g, 12 + r, -35, 18 + r, -37, c.main, 2);
+  },
+  shield(g, c) {                         // tall tower shield
+    box(g, -14, -27, 11, 25, 3, c.main, 1.6);
+    box(g, -12, -25, 7, 21, 2, null, 0);
+    line(g, -8.5, -24, -8.5, -5, c.light, 1.4);
+    line(g, -12.5, -15, -4.5, -15, c.light, 1.4);
+    dot(g, -8.5, -15, 1.6, GOLD);
+    g.beginPath(); g.roundRect(-14, -27, 11, 25, 3); g.lineWidth = 2; g.strokeStyle = STEEL_D; g.stroke();
+  },
+  sharp(g, c) {                          // feathered cap and a spyglass at the belt
+    poly(g, [-6, -29, -14, -40, -11, -41, -3, -30], c.light, 1.1);
+    line(g, -5, -30, -12, -39.5, c.dark, 0.9);
+    box(g, -8, -9, 7, 3, 1.4, '#b98a55', 1);
+  },
+  firearrow(g) {                         // quiver of burning arrows on the back
+    box(g, -11, -20, 5, 13, 2, WOOD_D, 1.1);
+    flame(g, -8.5, -20, 2.4);
+  },
+  heavy(g, c) {                          // steel barding on the horse, big plume
+    poly(g, [-9, -17, 9, -17, 10, -9, -10, -9], STEEL, 1.3);
+    for (const x of [-6, -1, 4]) dot(g, x, -13, 0.9, STEEL_D);
+    poly(g, [9, -18, 16, -28, 20, -25, 12, -13], STEEL, 1.2);
+    g.beginPath(); g.moveTo(-1, -38); g.quadraticCurveTo(-12, -48, -12, -36); g.quadraticCurveTo(-6, -40, -1, -37); g.closePath();
+    ink(g, GOLD, 1.1);
+  },
+  light(g, c, f) {                       // a long pennant streaming behind the rider
+    const w = f === 1 ? 2 : 0;
+    line(g, -5, -24, -5, -46, INK, 2);
+    line(g, -5, -24, -5, -46, WOOD, 1);
+    g.beginPath(); g.moveTo(-5, -46); g.quadraticCurveTo(-14, -48 - w, -22, -43 + w); g.lineTo(-5, -40); g.closePath();
+    ink(g, c.light, 1.1);
+  },
+  siege(g) {                             // iron helmet with a ram's brow
+    g.beginPath(); g.arc(3, -42, 9.6, Math.PI * 1.02, -0.02 * Math.PI); g.closePath(); ink(g, STEEL, 1.4);
+    box(g, -7, -43.5, 20, 3, 1, STEEL_D, 1.1);
+    for (const x of [-2, 3, 8]) dot(g, x, -47.5, 0.9, STEEL_D);
+  },
+  brute(g) {                             // spiked leather pauldrons
+    for (const x of [-13, 13]) {
+      ell(g, x, -31, 7, 5, '#5e3a1e', 1.3);
+      for (const dx of [-4, 0, 4]) poly(g, [x + dx - 1.6, -34, x + dx, -40, x + dx + 1.6, -34], '#e9eef3', 0.9);
+    }
+  },
+  slayer(g) {                            // dragon-skull trophy on the cart
+    ell(g, -2, -12, 5.5, 4, '#f4efe2', 1.2);
+    dot(g, -4, -12.5, 1, INK); dot(g, 0, -12.5, 1, INK);
+    poly(g, [-6, -14, -10, -19, -5.5, -15.5], '#f4efe2', 1);
+    poly(g, [2, -14, 6, -19, 1.5, -15.5], '#f4efe2', 1);
+    line(g, -6, -8.5, 2, -8.5, '#c0392b', 1.4);
+  },
+  grape(g) {                             // barrel of grapeshot on the back of the cart
+    box(g, -16, -27, 9, 11, 2.5, WOOD, 1.3);
+    line(g, -16, -24, -7, -24, WOOD_D, 1); line(g, -16, -19, -7, -19, WOOD_D, 1);
+    for (const [x, y] of [[-14, -28.5], [-11.5, -29.5], [-9, -28.5]]) dot(g, x, y, 1.6, '#3b3b3b');
+  },
+  firemage(g, c, f) {                    // flaming staff tip and embers on the hat
+    const [x, y] = ORB[f];
+    dot(g, x, y, 7, 'rgba(255, 120, 40, 0.45)');
+    flame(g, x, y + 2, 3.2);
+    flame(g, -6, -44, 1.8);
+  },
+  icemage(g, c, f) {                     // ice crystal on the staff, frost on the hat brim
+    const [x, y] = ORB[f];
+    dot(g, x, y, 7, 'rgba(150, 220, 255, 0.45)');
+    poly(g, [x, y - 6, x + 3.5, y, x, y + 5, x - 3.5, y], '#bfefff', 1.1);
+    for (const fx of [-7, -2, 3]) poly(g, [fx - 1.5, -29.5, fx, -26.5, fx + 1.5, -29.5], '#e6fbff', 0.8);
+  },
+  priest(g) {                            // golden mitre over the hood
+    poly(g, [-5, -30, -4.5, -40, 0.5, -45, 5.5, -40, 6, -30], GOLD, 1.3);
+    line(g, 0.5, -43, 0.5, -32, '#c0392b', 1.4);
+    line(g, -2.5, -37, 3.5, -37, '#c0392b', 1.4);
+  },
+  herbal(g, c) {                         // leaf crown and a little basket of herbs
+    for (const [x, a] of [[-5, -0.6], [-1, -0.2], [3, 0.2], [7, 0.6]]) {
+      g.save(); g.translate(x, -31); g.rotate(a);
+      g.beginPath(); g.ellipse(0, -2.5, 1.8, 3.2, 0, 0, TAU); ink(g, '#4caf50', 0.9);
+      g.restore();
+    }
+    box(g, -12, -11, 7, 5, 1.5, '#b98a55', 1);
+    dot(g, -10.5, -12, 1.5, '#4caf50'); dot(g, -7.5, -12.5, 1.5, '#7bd36b');
+  },
+  firedragon(g, c, f) {                  // flames licking along its back
+    const y = -26;
+    for (const x of [-6, -1, 4]) flame(g, x, y - 8, 2.2 + (f === 1 ? 0.6 : 0));
+    dot(g, 30, y - 12, 2.2, 'rgba(255, 140, 40, 0.6)');
+  },
+  armordragon(g) {                       // steel plates on body and head
+    const y = -26;
+    g.beginPath(); g.roundRect(-9, y - 6, 18, 9, 3); ink(g, STEEL, 1.3);
+    for (const x of [-5, 0, 5]) dot(g, x, y - 1.5, 0.9, STEEL_D);
+    g.beginPath(); g.arc(22, y - 14, 6, Math.PI * 1.05, -0.1 * Math.PI); g.closePath(); ink(g, STEEL, 1.1);
+  },
+};
+
 export const UNIT_KINDS = Object.keys(UNIT_ART);
 export const BUILDING_KINDS = Object.keys(BUILDING_ART);

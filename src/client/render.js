@@ -78,6 +78,9 @@ export function createRenderer(canvas) {
       } else if (e.type === 'splash') {
         if (!inView(e.x, e.y, 120)) continue;
         fx({ kind: 'boom', x: e.x, y: e.y, t: 0, life: 0.38, size: e.r, fire: e.kind === 'dragon' });
+      } else if (e.type === 'aura') {
+        if (!inView(e.x, e.y, 150)) continue;
+        fx({ kind: 'ring', x: e.x, y: e.y, t: 0, life: 0.7, size: e.r * 0.8, color: '#8fe39a' });
       } else if (e.type === 'heal') {
         if (!inView(e.x, e.y, 60)) continue;
         fx({ kind: 'heal', x: e.x, y: e.y, t: 0, life: 0.7 });
@@ -268,8 +271,20 @@ export function createRenderer(canvas) {
         else if (def.flying) f = Math.floor(time * 5 + u.id * 0.37) % 2;
         else if (moving) f = Math.floor(time * 7 + u.id * 0.37) % 2;
         const flash = time - u.hitAt < 0.07;
-        const s = unitSprite(u.kind, col, f, flip, flash);
+        const s = unitSprite(u.kind, col, f, flip, flash, u.spec);
+        if (u.slowUntil > time) { // frost on the ground under an iced unit
+          g.strokeStyle = 'rgba(200, 240, 255, 0.9)'; g.lineWidth = 2.5;
+          g.beginPath(); g.ellipse(it.x, it.uy, def.radius + 6, (def.radius + 6) * 0.45, 0, 0, TAU); g.stroke();
+        }
         g.drawImage(s.cv, it.x + s.dx, it.uy + s.dy, s.w, s.h);
+        if (u.slowUntil > time) snowflake(g, it.x + def.radius, it.uy + s.dy + 6, 4);
+        if (u.burnUntil > time) { // flickering fire on a burning unit
+          const fl = 1 + 0.25 * Math.sin(r.frame * 0.6 + u.id);
+          g.fillStyle = 'rgba(255, 140, 40, 0.85)';
+          g.beginPath(); g.ellipse(it.x - 3, it.uy + s.dy + 10, 3.5 * fl, 6 * fl, 0, 0, TAU); g.fill();
+          g.fillStyle = 'rgba(255, 230, 120, 0.9)';
+          g.beginPath(); g.ellipse(it.x + 3, it.uy + s.dy + 12, 2.2 * fl, 4 * fl, 0, 0, TAU); g.fill();
+        }
         const top = it.uy + s.dy + (u.kind === 'commander' ? 0 : 4);
         if (u.hp < u.maxHp) bar(g, it.x, top - 3, def.radius * 2 + 6, u.hp / u.maxHp, 3.5, null);
         if (u.kind === 'caravan') {
@@ -308,6 +323,16 @@ function drawCrown(g, x, y, frame) {
   g.fillStyle = '#7fe3ff';
   g.beginPath(); g.arc(x - 6, y - 3, 1.3, 0, TAU); g.fill();
   g.beginPath(); g.arc(x + 6, y - 3, 1.3, 0, TAU); g.fill();
+}
+
+function snowflake(g, x, y, s) {
+  g.strokeStyle = '#e6fbff'; g.lineWidth = 1.6; g.lineCap = 'round';
+  g.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = i * Math.PI / 3;
+    g.moveTo(x - Math.cos(a) * s, y - Math.sin(a) * s); g.lineTo(x + Math.cos(a) * s, y + Math.sin(a) * s);
+  }
+  g.stroke();
 }
 
 function sparkle(g, x, y, s) {
