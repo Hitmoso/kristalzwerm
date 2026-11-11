@@ -7,7 +7,7 @@ import {
 } from '../sim/index.js';
 import {
   UNIT_KINDS, BUILDING_KINDS, SNAPSHOT_EVERY, MINIMAP_EVERY, VIEW_HALF_W, VIEW_HALF_H,
-  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, cleanName,
+  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, cleanName, PROTOCOL,
 } from '../net/protocol.js';
 
 const MAX_HUMANS = 10;
@@ -180,6 +180,8 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
 
   // ---- connection handling ----
   function join(send, hello) {
+    // A page from before the last deploy would misread what we send: turn it away so it reloads.
+    if (hello?.v !== PROTOCOL) { send({ t: 'old', v: PROTOCOL }); return null; }
     if (humans() >= MAX_HUMANS) { send({ t: 'full' }); return null; }
     start();
     const name = cleanName(hello?.name);
@@ -188,7 +190,7 @@ export function createRoom({ adminKey = '', code = '', log = () => {} } = {}) {
     const c = { send, playerId: player.id, events: [], crystalSig: NaN, inputs: [], ack: 0, lastIn: 0, debt: 0, vx: 0, vy: 0, cmdCount: 0, cmdWindow: 0 };
     room.clients.add(c);
     balanceBots();
-    send({ t: 'init', room: code, id: player.id, size: room.world.size, snapHz: 30 / SNAPSHOT_EVERY, admin: player.admin });
+    send({ t: 'init', v: PROTOCOL, room: code, id: player.id, size: room.world.size, snapHz: 30 / SNAPSHOT_EVERY, admin: player.admin });
     log(`${name} doet mee (${humans()} online)`);
     return c;
   }

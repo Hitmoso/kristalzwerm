@@ -22,6 +22,9 @@ export function updateCaravan(world, dt) {
     cv.y = wagon.y;
     cv.hp = wagon.hp / wagon.maxHp;
   }
+  // a cart that got wedged somewhere (a castle on the route, a corner) gives up in the end,
+  // so it can never block the caravans after it
+  if (cv.state === 'rolling' && world.time > cv.deadline) cv.arrived = true;
   if (cv.state === 'rolling' && cv.arrived) {
     world.events.push({ type: 'caravan', phase: 'escaped', x: cv.x, y: cv.y });
     endCaravan(world);
@@ -53,6 +56,7 @@ export function spawnCaravan(world) {
   world.caravan = {
     wagonId: wagon.id, guards, x: sx, y: sy, ex, ey, hp: 1,
     state: 'rolling', arrived: false, side: rand(world) < 0.5 ? 1 : -1, endAt: 0, startedAt: world.time,
+    deadline: world.time + 2 * (d / UNITS.caravan.speed),
   };
   world.events.push({ type: 'caravan', phase: 'spawn', x: sx, y: sy });
   return world.caravan;

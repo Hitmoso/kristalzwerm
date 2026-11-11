@@ -77,7 +77,7 @@ wss.on('connection', (ws) => {
       client = game ? game.join(send, msg) : null;
       if (!client) {
         if (game && game.humans() === 0) rooms.delete(code);
-        send({ t: 'full' });
+        if (!game) send({ t: 'full' }); // too many rooms; join() explains its own refusals
         ws.close();
       }
       return;

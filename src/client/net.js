@@ -11,7 +11,7 @@
 import { UNITS, BUILDINGS, WORLD, DT, moveKing } from '../sim/index.js';
 import {
   UNIT_KINDS, BUILDING_KINDS, UNIT_STRIDE, BUILDING_STRIDE, CRYSTAL_STRIDE,
-  F_ATTACK, F_HIT, F_LEFT, F_RIGHT,
+  F_ATTACK, F_HIT, F_LEFT, F_RIGHT, PROTOCOL,
 } from '../net/protocol.js';
 
 export function connect({ name, key, room, onReady, onClose }) {
@@ -33,7 +33,7 @@ export function connect({ name, key, room, onReady, onClose }) {
 
   const send = (msg) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
 
-  ws.onopen = () => send({ t: 'join', name, key, room });
+  ws.onopen = () => send({ t: 'join', v: PROTOCOL, name, key, room });
   ws.onclose = () => { net.closed = true; onClose(net.ready ? 'lost' : net.full ? 'full' : 'unreachable'); };
   ws.onerror = () => {};
   ws.onmessage = (ev) => {
@@ -42,7 +42,19 @@ export function connect({ name, key, room, onReady, onClose }) {
     if (msg.t === 's') snapshot(msg);
     else if (msg.t === 'init') { net.room = msg.room; myId = msg.id; world.size = msg.size; interval = 1 / msg.snapHz; net.admin = msg.admin; }
     else if (msg.t === 'full') net.full = true;
+    else if (msg.t === 'old') reloadForNewVersion();
   };
+
+  // The server runs a newer version than this page: fetch the new page (once per minute at most,
+  // so a half-finished deploy can never cause a reload loop).
+  function reloadForNewVersion() {
+    let last = 0;
+    try { last = Number(sessionStorage.getItem('kz-reloaded')) || 0; } catch { /* private window */ }
+    if (Date.now() - last < 60000) return;
+    try { sessionStorage.setItem('kz-reloaded', String(Date.now())); } catch { /* private window */ }
+    net.reloading = true;
+    location.reload();
+  }
 
   function player(id) {
     return world.players[id] || (world.players[id] = {

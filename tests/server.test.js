@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRoom } from '../src/server/room.js';
-import { UNIT_STRIDE, UNIT_KINDS } from '../src/net/protocol.js';
+import { UNIT_STRIDE, UNIT_KINDS, PROTOCOL } from '../src/net/protocol.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const fakeClient = (game, hello) => {
   const inbox = [];
-  const c = game.join((m) => inbox.push(JSON.parse(JSON.stringify(m))), hello);
+  const c = game.join((m) => inbox.push(JSON.parse(JSON.stringify(m))), { v: PROTOCOL, ...hello });
   const snaps = () => inbox.filter((m) => m.t === 's');
   const king = () => {
     const s = snaps().at(-1), id = inbox[0].id;
@@ -119,4 +119,14 @@ test('late inputs are caught up exactly, but never faster than real time', async
   // ~9 ticks passed; at most 8 more may be owed from the pause before. 390 would be cheating.
   const steps = (after.kx - before.kx) / (190 / 30);
   assert.ok(steps <= 9 + 8 + 3, `walked ${steps.toFixed(1)} steps`);
+});
+
+test('a page from an older version is turned away so it reloads', () => {
+  const game = createRoom({});
+  const inbox = [];
+  const c = game.join((m) => inbox.push(m), { name: 'Oud' }); // no version: the page from before
+  assert.equal(c, null);
+  assert.equal(inbox[0].t, 'old');
+  assert.equal(game.humans(), 0);
+  assert.equal(game.room.timer, null, 'no world was started for it');
 });

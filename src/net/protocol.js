@@ -22,6 +22,10 @@ export function cleanRoom(raw) {
   return String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 }
 
+// Bumped whenever the wire format or game rules change in a way an already-open page cannot
+// handle. A page with another version is refused by the server and reloads itself.
+export const PROTOCOL = 4;
+
 export const MAX_NAME = 14;
 export function cleanName(raw) {
   const s = String(raw ?? '').replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);

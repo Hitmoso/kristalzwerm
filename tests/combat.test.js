@@ -454,3 +454,29 @@ test('nobody can train a caravan, and only admins can summon one', () => {
   assert.equal(me.queue.length, 0);
   assert.equal(world.caravan, null);
 });
+
+test('a castle on the route never stops the caravans for good', () => {
+  const world = createWorld({ seed: 44 });
+  world.crystals.length = 0; world.crystalTimer = -1e9;
+  const p = addPlayer(world, { name: 'Muur' });
+  p.admin = true;
+  queueCommand(world, p.id, { type: 'caravan' });
+  step(world);
+  const cv = world.caravan;
+  const wagon = findById(world.units, cv.wagonId);
+  // move the castle (and the king, out of the way) right onto the middle of the route
+  const hq = findById(world.buildings, p.hqId);
+  hq.x = (wagon.x + cv.ex) / 2; hq.y = (wagon.y + cv.ey) / 2;
+  const king = findById(world.units, p.commanderId);
+  king.x = 200; king.y = 200;
+  for (const u of world.units) if (u.owner === p.id && u !== king) u.hp = 0;
+  let done = null;
+  for (let i = 0; i < 400 * 30 && !done; i++) {
+    step(world);
+    done = world.events.find((e) => e.type === 'caravan' && (e.phase === 'escaped' || e.phase === 'loot'));
+  }
+  assert.ok(done, 'the caravan ended one way or another');
+  assert.equal(world.caravan, null);
+  run(world, CARAVAN.every + 1);
+  assert.ok(world.caravan, 'and the next one still comes');
+});

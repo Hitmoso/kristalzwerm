@@ -140,6 +140,7 @@ function startOnline() {
         startEl.hidden = false;
         newLocalWorld(false);
       }
+      if (net.reloading) return say('Nieuwe versie gevonden — de pagina wordt ververst…');
       say(why === 'full' ? 'De server zit vol. Probeer het zo nog eens.'
         : why === 'lost' ? 'Verbinding met de server verbroken.'
         : 'Server niet bereikbaar. Je kunt wel oefenen tegen bots.');
