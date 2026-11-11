@@ -36,7 +36,7 @@ Verlies je je kasteel, dan zie je wat je dat leven hebt bereikt: hoe lang je ove
 
 ## Smidse en specialisaties
 
-Bouw een **Smidse** (toets 5, 180 goud). Daarna staat er een ★ op elke trainknop: kies per troepsoort één van twee richtingen. De keuze geldt meteen voor al je troepen van die soort, en voor de rest van dit leven; valt je kasteel, dan begin je weer zonder.
+Bouw een **Smidse** (toets 5, 300 goud). Daarna staat er een ★ op elke trainknop: kies per troepsoort één van twee richtingen (350 tot 700 goud). De keuze geldt meteen voor al je troepen van die soort, en voor de rest van dit leven; valt je kasteel, dan begin je weer zonder.
 
 | Troep | Richting A | Richting B |
 |---|---|---|

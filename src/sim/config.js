@@ -84,7 +84,7 @@ export const BUILDINGS = {
   barracks: { hp: 500, radius: 30, cost: 150, supply: 8, trains: true },
   tower: { hp: 420, radius: 20, cost: 130, dmg: 16, range: 250, cd: 0.6 },
   academy: { hp: 450, radius: 30, cost: 220, supply: 6, trains: true },
-  forge: { hp: 400, radius: 26, cost: 180 }, // the Smidse: unlocks specialisations
+  forge: { hp: 400, radius: 26, cost: 300 }, // the Smidse: unlocks specialisations
 };
 
 // turn = how fast the stick follows the plan (rad-ish per second); micro = how well the king
@@ -111,42 +111,42 @@ export const BOT_NAMES = ['Vos', 'Raaf', 'Otter', 'Wezel', 'Havik', 'Das', 'Lynx
 //   burn/burnDps   a hit sets the target on fire for this long
 export const SPECS = {
   soldier: {
-    cost: 200,
+    cost: 350,
     a: { id: 'spear', name: 'Speerdrager', desc: 'Dubbele schade tegen ridders en reuzen', mods: { bigMult: 2.2 } },
     b: { id: 'shield', name: 'Schilddrager', desc: 'Halve schade van pijlen en schoten, iets trager', mods: { hp: 75, rangedResist: 0.5, speed: 135 } },
   },
   archer: {
-    cost: 200,
+    cost: 350,
     a: { id: 'sharp', name: 'Scherpschutter', desc: 'Veel verder bereik en iets meer schade', mods: { range: 240, dmg: 12, cd: 1.2 } },
     b: { id: 'firearrow', name: 'Vuurpijlen', desc: 'Elke pijl raakt een klein groepje', mods: { splash: 32, dmg: 9 } },
   },
   knight: {
-    cost: 260,
+    cost: 450,
     a: { id: 'heavy', name: 'Zware ridder', desc: '50% meer levens en een hardere stormloop, trager', mods: { hp: 210, charge: 3.2, speed: 170 } },
     b: { id: 'light', name: 'Lichte ruiter', desc: 'Sneller, en elke derde klap is een stormloop', mods: { speed: 245, chargeEvery: 3 } },
   },
   giant: {
-    cost: 300,
+    cost: 520,
     a: { id: 'siege', name: 'Belegeraar', desc: 'Sloopt gebouwen veel sneller, zwakker tegen troepen', mods: { buildingMult: 4.5, dmg: 24 } },
     b: { id: 'brute', name: 'Bruut', desc: 'Elke klap raakt alles om hem heen', mods: { splash: 32, hp: 360, dmg: 27 } },
   },
   ballista: {
-    cost: 260,
+    cost: 450,
     a: { id: 'slayer', name: 'Drakendoder', desc: 'Nog meer schade op draken en verder bereik', mods: { airMult: 5, range: 270 } },
     b: { id: 'grape', name: 'Schroot', desc: 'Raakt een hele groep grondtroepen', mods: { splash: 60, dmg: 14, airMult: 2 } },
   },
   mage: {
-    cost: 300,
+    cost: 520,
     a: { id: 'firemage', name: 'Vuurmagiër', desc: 'Grotere explosie en meer schade', mods: { splash: 85, dmg: 15 } },
     b: { id: 'icemage', name: 'IJsmagiër', desc: 'Vertraagt vijanden 2 seconden, iets minder schade', mods: { dmg: 10, slow: 2 } },
   },
   healer: {
-    cost: 260,
+    cost: 450,
     a: { id: 'priest', name: 'Priester', desc: 'Geneest twee troepen tegelijk', mods: { healTargets: 2, heal: 10 } },
     b: { id: 'herbal', name: 'Kruidenvrouw', desc: 'Geneest langzaam iedereen om zich heen', mods: { aura: 175, heal: 8, cd: 1 } },
   },
   dragon: {
-    cost: 400,
+    cost: 700,
     a: { id: 'firedragon', name: 'Vuurdraak', desc: 'Wat hij raakt, brandt nog 3 seconden door', mods: { burn: 3, burnDps: 8 } },
     b: { id: 'armordragon', name: 'Pantserdraak', desc: 'Meer levens en halve schade van ballisten', mods: { hp: 340, ballistaResist: 0.5 } },
   },
