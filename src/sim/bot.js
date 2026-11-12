@@ -10,7 +10,7 @@ import { DIFFICULTY, UNITS, BUILDINGS, WORLD, CARAVAN, SPECS } from './config.js
 
 const RAID_POWER = 850; // army value a bot wants before taking on a caravan escort
 import { rand, randRange } from './rng.js';
-import { playerStats, buildingCost, queueCommand, setInput, findById } from './world.js';
+import { buildingCost, queueCommand, setInput, findById } from './world.js';
 import { countOwned } from './step.js';
 
 // Each bot gets a temperament for life; it colours every decision a little.
@@ -43,6 +43,12 @@ function ensure(world, p) {
     grudge: -1,
     slow: false,
     foe: null,                  // { x, y, d } nearest enemy unit, refreshed every tick
+    war: null,                  // a siege we committed to: { target, joint, phase, since, startPower, arrivedAt }
+    pledge: -1,                 // "I am ready to march on this player as soon as enough of us are"
+    restUntil: 0,               // licking our wounds after a broken siege: no new one before this
+    calmSince: world.time,      // last time we fought; a long quiet makes a bot restless
+    armsRace: false,            // a giant is on the map: fill the camp to the brim
+    lastX: 0, lastY: 0, stuckAt: world.time, // to notice a king wedged between buildings
   });
   return b;
 }
@@ -68,7 +74,7 @@ function steer(world, p, bot, diff, king, dt) {
   const micro = diff.micro ?? 0.6;
   let dx = bot.tx - king.x, dy = bot.ty - king.y;
   const d = Math.hypot(dx, dy) || 0.001;
-  const stop = bot.goal === 'attack' ? 170 : bot.goal === 'gather' ? 4 : bot.goal === 'build' ? 30 : bot.goal === 'capture' ? 60 : 45;
+  const stop = bot.goal === 'siege' ? 470 : bot.goal === 'attack' ? 170 : bot.goal === 'gather' ? 4 : bot.goal === 'build' ? 30 : bot.goal === 'capture' ? 60 : 45;
   let mx = 0, my = 0;
   if (d > stop) {
     const ease = Math.min(1, (d - stop) / 70 + 0.25); // ease in to a halt instead of stopping dead
@@ -191,18 +197,29 @@ function specialise(world, p) {
   queueCommand(world, p.id, { type: 'spec', kind, choice: side });
 }
 
+// How much of its room a bot fills with troops. Gold lying idle is an army not built:
+// a rich bot fills up further (an easy one stays a little lazy).
+function armyGoal(p, diff) {
+  if (p.difficulty === 'novice') return diff.armyTarget;
+  const top = p.difficulty === 'easy' ? 0.8 : 1;
+  if (p.bot.armsRace) return top; // a giant on the map: everything goes into the army
+  return Math.min(top, Math.max(diff.armyTarget, diff.armyTarget + (p.gold - 400) / 3000));
+}
+
 function wantedBuilding(p, st, diff, persona) {
   const maxMines = Math.max(1, diff.maxMines + persona.mines);
   if (st.mines < 1) return 'mine';
   if (st.barracks < 1) return 'barracks';
   if (st.mines < 2 && maxMines >= 2) return 'mine';
   if (st.towers < 1 && persona.towers >= 1 && p.difficulty !== 'easy' && p.difficulty !== 'novice') return 'tower';
+  if (st.mines < 3 && maxMines >= 3 && st.army >= 8) return 'mine';
   if (st.academy < 1 && st.mines >= 2 && st.army >= 10 && p.difficulty !== 'novice') return 'academy';
   if (st.forge < 1 && st.barracks >= 2 && st.army >= 14 && p.difficulty !== 'novice') return 'forge';
-  if (st.mines < maxMines && st.army >= st.mines * 5) return 'mine'; // army first, greed second
-  const nearCap = st.supply >= st.cap * diff.armyTarget - 2;
+  // room for the army comes before more income: a full camp with a full purse wins nothing
+  const nearCap = st.supply >= st.cap * armyGoal(p, diff) - 4;
   if (st.barracks < 2 && nearCap) return 'barracks';
-  if (st.barracks < 10 && nearCap && p.gold > 350 && p.difficulty !== 'easy') return 'barracks';
+  if (st.mines < maxMines && st.army >= st.mines * 3 && !(nearCap && st.mines >= 3 && st.barracks < 10)) return 'mine'; // army first, greed second
+  if (st.barracks < 10 && nearCap && p.gold > 350 && (p.difficulty !== 'easy' || (p.gold > 600 && st.barracks < 4))) return 'barracks';
   if (st.towers < persona.towers && p.gold > 420) return 'tower';
   return null;
 }
@@ -234,17 +251,34 @@ function think(world, p, st, diff, king, hq) {
 
   // --- what is around me? one pass over the units ---
   let ownNear = 0, ownAll = 0, foeNear = 0, healers = 0, mages = 0, count = 0, close = 0;
-  let foeX = 0, foeY = 0, foeW = 0;
+  let foeX = 0, foeY = 0, foeW = 0, coNear = 0;
   const kx = king ? king.x : hq.x, ky = king ? king.y : hq.y;
+  const hqOf = [], towersOf = [], power = [], homePower = [];
+  let raided = null; // one of our buildings (not the castle) that is being knocked down
+  for (const b of world.buildings) {
+    if (b.kind === 'hq') hqOf[b.owner] = b;
+    else if (b.kind === 'tower') towersOf[b.owner] = (towersOf[b.owner] || 0) + 1;
+    if (b.owner === p.id && b.kind !== 'hq' && time - b.hitAt < 4 && b.hitBy !== undefined && b.hitBy !== p.id) raided = b;
+  }
+  // Bots marching on the same castle as we are: not friends, but not the enemy of the hour either.
+  const warTarget = bot.war ? bot.war.target : -1;
+  const co = [];
+  if (warTarget >= 0) for (const q of world.players) co[q.id] = q.id !== p.id && !!(q.bot && q.bot.war && q.bot.war.target === warTarget);
   for (const u of world.units) {
     const d = Math.hypot(u.x - kx, u.y - ky);
+    if (u.owner >= 0) {
+      const v = valueOf(u), h = hqOf[u.owner];
+      power[u.owner] = (power[u.owner] || 0) + v;
+      if (h && Math.abs(u.x - h.x) < 700 && Math.abs(u.y - h.y) < 700) homePower[u.owner] = (homePower[u.owner] || 0) + v;
+    }
     if (u.owner === p.id) {
       const v = valueOf(u);
       ownAll += v;
       if (d < 520) ownNear += v;
       if (u.kind !== 'commander') { count++; if (d < 300) close++; if (u.kind === 'healer') healers++; if (u.kind === 'mage') mages++; }
     } else if (d < 760) {
-      const v = valueOf(u);
+      let v = valueOf(u);
+      if (co[u.owner]) { coNear += v; v *= 0.25; }
       foeNear += v; foeX += u.x * v; foeY += u.y * v; foeW += v;
     }
   }
@@ -253,7 +287,7 @@ function think(world, p, st, diff, king, hq) {
     if (b.owner === p.id || !def.dmg) continue;
     if (Math.hypot(b.x - kx, b.y - ky) < def.range + 120) foeNear += b.kind === 'hq' ? 260 : 130;
   }
-  const ratio = ownNear / (foeNear + 1);
+  const ratio = (ownNear + 0.6 * coNear) / (foeNear + 1);
 
   // --- economy ---
   const want = wantedBuilding(p, st, diff, persona);
@@ -263,7 +297,13 @@ function think(world, p, st, diff, king, hq) {
   if (bot.build && (!want || bot.build.kind !== want)) bot.build = null;
   bot.lastCount = countNow;
   if (want && p.gold >= wantCost && king && !bot.build) bot.build = buildSpot(world, hq, want, bot.buildTries);
-  if (bot.build && king && Math.hypot(king.x - bot.build.x, king.y - bot.build.y) < 150) {
+  // Wedged between our own buildings on the way there: try another spot.
+  if (king) {
+    const moved = Math.hypot(king.x - bot.lastX, king.y - bot.lastY);
+    if (moved > 25 || bot.goal !== 'build') { bot.lastX = king.x; bot.lastY = king.y; bot.stuckAt = time; }
+    else if (time - bot.stuckAt > 3 && bot.build) { bot.buildTries++; bot.build = buildSpot(world, hq, bot.build.kind, bot.buildTries); bot.stuckAt = time; }
+  }
+  if (bot.build && king && Math.hypot(king.x - bot.build.x, king.y - bot.build.y) < 200) {
     queueCommand(world, p.id, { type: 'build', kind: bot.build.kind, x: bot.build.x, y: bot.build.y });
     bot.buildTries++;                       // if it is refused, the next think picks another spot
     bot.build = p.gold >= wantCost ? buildSpot(world, hq, want, bot.buildTries) : null;
@@ -274,7 +314,7 @@ function think(world, p, st, diff, king, hq) {
   if (!saving) {
     let gold = p.gold - (want && p.gold >= wantCost ? wantCost : 0);
     let supply = st.supply;
-    const target = st.cap * diff.armyTarget;
+    const target = st.cap * armyGoal(p, diff);
     let enemyDragons = 0, enemyBallistas = 0, ballistas = 0;
     for (const u of world.units) {
       if (u.kind === 'dragon' && u.owner !== p.id) enemyDragons++;
@@ -304,6 +344,8 @@ function think(world, p, st, diff, king, hq) {
   // An admin's order overrides everything below (but not the economy above).
   const ord = world.botOrder;
   if (ord) {
+    bot.war = null;
+    bot.pledge = -1;
     if (ord.order === 'center') return setGoal(bot, 'capture', world.shrine.x, world.shrine.y, -1);
     if (ord.order === 'home' || ord.target === p.id) return setGoal(bot, 'defend', homeX, homeY, -1);
     const t = world.players[ord.target];
@@ -318,31 +360,115 @@ function think(world, p, st, diff, king, hq) {
   // Remember who hurt us.
   if (time - p.hqHitAt < 1 && hq.hitBy !== undefined && hq.hitBy !== p.id) bot.grudge = hq.hitBy;
 
+  const prevPledge = bot.pledge;
+  bot.pledge = -1;
+  if (bot.goal === 'attack' || bot.goal === 'siege' || bot.goal === 'defend' || bot.goal === 'retreat') bot.calmSince = time;
+  // the army only marches off on its own during a siege; any other time it stays with the king
+  if (p.army !== 'follow' && !(bot.war && bot.war.phase === 'siege')) queueCommand(world, p.id, { type: 'army', mode: 'follow' });
+  // A siege that is called off (or beaten off) is followed by a breather before the next one.
+  const endWar = (rest) => {
+    if (bot.war && rest) bot.restUntil = time + rest * randRange(world, 0.8, 1.3);
+    bot.war = null;
+  };
+
   // 1. Running away is a commitment: keep running until it is actually safe.
-  const outmatched = foeNear > 140 && ratio < (diff.micro ? 0.62 : 0.5);
+  // Storming a castle costs blood: a bot that chose to do so does not flinch at the first volley.
+  const sieging = bot.war && bot.war.phase === 'siege';
+  // During a siege the army is at the walls and the king watches from out of bowshot: what
+  // counts then is how much of the army is left, not what stands around the king.
+  const outmatched = !sieging && foeNear > 140 && ratio < (diff.micro ? 0.62 : 0.5);
+  const broken = bot.war && st.power < bot.war.startPower * 0.45;
   if (bot.goal === 'retreat') {
     const safe = foeNear < 60 && (hp > 0.6 || distHome < 260);
     if (!safe || time < bot.commitUntil) return setGoal(bot, 'retreat', homeX, homeY, -1);
-  } else if (hp < 0.33 || outmatched) {
-    bot.commitUntil = time + 2.5;
+  } else if (hp < 0.33 || outmatched || broken) {
+    bot.commitUntil = time + (broken ? 5 : 2.5);
+    endWar(70);
     return setGoal(bot, 'retreat', homeX, homeY, -1);
   }
 
   // 2. The castle is under attack: go home — unless we are about to win where we are.
-  if (time - p.hqHitAt < 5 && !(bot.goal === 'attack' && ratio > 2 && distHome > 1500)) {
+  if (time - p.hqHitAt < 5 && !((bot.goal === 'attack' || bot.goal === 'siege') && ratio > 2 && distHome > 1500)) {
+    endWar(0);
     return setGoal(bot, 'defend', homeX, homeY, -1);
   }
+  // 2b. Someone is knocking down our mines or barracks: that is an attack too.
+  if (raided && !sieging) {
+    endWar(0);
+    return setGoal(bot, 'defend', raided.x, raided.y, -1);
+  }
 
-  // 3. Pick a fight?
+  // 3. War. What defends a castle is what stands near it: the garrison, the towers, and
+  // whatever part of the army can still get home in time. A player whose army is out
+  // roaming has an open door, however strong that army is.
   const myPower = st.power;
-  const aggression = diff.aggression * persona.aggression;
-  let best = null, bestScore = 0, topScore = 1;
+  const defenceOf = (e, eh, ec) => {
+    const all = power[e.id] || 0, home = Math.min(all, homePower[e.id] || 0);
+    const dAway = ec ? Math.hypot(ec.x - eh.x, ec.y - eh.y) : 0;
+    const back = ec ? Math.max(0.25, 1 - dAway / 2400) : 0.5;
+    return home + (all - home) * back + 320 + (towersOf[e.id] || 0) * 130;
+  };
+  // Restless: the longer nothing has happened, the less of an edge a bot wants before it marches.
+  const calm = time - bot.calmSince;
+  const patience = 1 - 0.3 * Math.max(0, Math.min(1, (calm - 60) / 150));
+  const aggression = Math.max(0.9, diff.aggression * persona.aggression * patience);
+  const ready = myPower >= 420 && st.supply >= st.cap * armyGoal(p, diff) * 0.7;
+
+  // 3a. A siege under way is a commitment: march, gather at the gates, storm together.
+  if (bot.war) {
+    const w = bot.war;
+    const e = world.players[w.target];
+    const eh = e && e.alive ? hqOf[e.id] : null;
+    if (!eh || time < e.shieldUntil || time - w.since > 240) endWar(0);
+    else {
+      const ec = e.commanderId ? findById(world.units, e.commanderId) : null;
+      const dT = Math.hypot(eh.x - king.x, eh.y - king.y);
+      if (w.phase === 'march' && dT < 1050) {
+        const need = defenceOf(e, eh, ec);
+        if (!w.arrivedAt) w.arrivedAt = time;
+        // who else is already here, or already at the walls?
+        let arrived = 0, storming = false, coming = false;
+        for (const q of world.players) {
+          if (q.id === p.id || !q.alive || !q.bot || !q.bot.war || q.bot.war.target !== e.id) continue;
+          const qk = q.commanderId ? findById(world.units, q.commanderId) : null;
+          if (!qk || Math.hypot(qk.x - eh.x, qk.y - eh.y) > 1300) { if (qk) coming = true; continue; }
+          arrived += power[q.id] || 0;
+          if (q.bot.war.phase === 'siege') storming = true;
+        }
+        const waitForMore = coming && !storming && time - w.arrivedAt < 25; // the more the merrier
+        if (!waitForMore && (myPower > need * 0.95 || myPower + 0.85 * arrived > need * 0.9 || (storming && arrived > need * 0.5))) w.phase = 'siege';
+        else if (time - w.arrivedAt > 60) endWar(35); // nobody came: not today
+      }
+      if (bot.war) {
+        if (w.phase === 'siege') {
+          // send the army at the castle, the way a player does, and keep the king out of the towers' reach
+          if (p.army !== 'attack' || p.armyTarget !== e.id) queueCommand(world, p.id, { type: 'army', mode: 'attack', target: e.id });
+          return setGoal(bot, 'siege', eh.x, eh.y, e.id);
+        }
+        // gather on our own side of the target, out of reach of its towers
+        const ax = hq.x - eh.x, ay = hq.y - eh.y, al = Math.hypot(ax, ay) || 1;
+        if (diff.micro && count >= 6 && close < count * 0.55 && !bot.foe) bot.slow = true;
+        return setGoal(bot, 'attack', eh.x + (ax / al) * 820, eh.y + (ay / al) * 820, e.id);
+      }
+    }
+  }
+
+  let best = null, bestScore = 0, topScore = 1, pledge = -1, pledgeLure = 0;
   for (const e of world.players) if (e.id !== p.id && e.alive && e.score > topScore) topScore = e.score;
+  // A giant: an army no bot of our size takes on alone. While one walks
+  // the map, the rest of us have better things to do than besiege each other.
+  const isGiant = (e) => (power[e.id] || 0) >= 2000 && (power[e.id] || 0) > myPower * 1.4;
+  let giantId = -1;
+  for (const e of world.players) {
+    if (e.id === p.id || !e.alive || !hqOf[e.id] || !isGiant(e)) continue;
+    if (giantId < 0 || power[e.id] > power[giantId]) giantId = e.id;
+  }
+  bot.armsRace = giantId >= 0;
   for (const e of world.players) {
     if (e.id === p.id || !e.alive) continue;
-    const eh = findById(world.buildings, e.hqId);
+    const eh = hqOf[e.id];
     if (!eh) continue;
-    const es = playerStats(world, e.id);
+    const ePower = power[e.id] || 0;
     const ec = e.commanderId ? findById(world.units, e.commanderId) : null;
     const fresh = time < e.shieldUntil; // no spawn camping
     const settled = time - e.spawnedAt > WORLD.botMercy;
@@ -354,25 +480,55 @@ function think(world, p, st, diff, king, hq) {
     const busy = time - e.hqHitAt < 6 || !ec;             // already in trouble, or king is dead
     if (busy) lure *= 1 + 0.5 * persona.opportunism;
     if (eh.hp < eh.maxHp * 0.5) lure *= 1 + 0.4 * persona.opportunism;
+    // the enemy of my enemy: leave a bot alone that is about to march on the same player
+    if (e.bot && ((prevPledge >= 0 && (e.bot.pledge === prevPledge || (e.bot.war && e.bot.war.target === prevPledge))) || (giantId >= 0 && e.id !== giantId))) lure *= 0.35;
 
     if (ec && !fresh) {
       const dc = Math.hypot(ec.x - king.x, ec.y - king.y);
       // Catch an army in the open, away from its towers.
       const awayFromHome = Math.hypot(ec.x - eh.x, ec.y - eh.y) > 420;
-      if (dc < 950 && awayFromHome && myPower > es.power * aggression) {
+      if (dc < 950 && awayFromHome && myPower > ePower * aggression) {
         const s = lure * 1.5 / (1 + dc / 1200);
         if (s > bestScore) { bestScore = s; best = { id: e.id, x: ec.x, y: ec.y }; }
       }
     }
-    const basePower = es.power * (ec ? 1 : 0.7) + 320 + es.towers * 130;
-    const keepGoing = e.id === bot.targetPlayer && bot.goal === 'attack' ? 0.8 : 1; // don't lose heart at the gates
     // No honour in flattening someone far weaker who is not even in the race — unless they started it.
-    const bullying = es.power < myPower * 0.35 && e.score < topScore * 0.8 && e.id !== bot.grudge && e.id !== p.revenge;
-    if (!fresh && settled && !bullying && myPower >= 420 && myPower > basePower * aggression * keepGoing) {
-      const dh = Math.hypot(eh.x - king.x, eh.y - king.y);
-      const s = lure / (1 + dh / 1800);
-      if (s > bestScore) { bestScore = s; best = { id: e.id, x: eh.x, y: eh.y }; }
+    const bullying = ePower < myPower * 0.45 && e.score < topScore * 0.8 && e.id !== bot.grudge && e.id !== p.revenge;
+    if (fresh || !settled || bullying || myPower < 420 || time < bot.restUntil) continue;
+    const need = defenceOf(e, eh, ec);
+    const dh = Math.hypot(eh.x - king.x, eh.y - king.y);
+    const s = lure / (1 + dh / 1800);
+    // Against equals a bot wants a wide margin over the whole army: no petty wars that keep
+    // everyone small. Against a giant it settles for less, and for what is actually at home.
+    const giant = isGiant(e);
+    if (giantId >= 0 && !giant && e.id !== p.revenge && time - e.hqHitAt > 6) continue; // truce
+    const worthy = giant || ((e.id === bot.grudge || e.id === p.revenge) && ePower > myPower);
+    const soloNeed = worthy ? need * aggression
+      : Math.max(need, ePower * (ec ? 1 : 0.7) + 320 + (towersOf[e.id] || 0) * 130) * diff.aggression * persona.aggression;
+    if (myPower > soloNeed) {
+      // strong enough alone
+      if (s > bestScore) { bestScore = s; best = { id: e.id, x: eh.x, y: eh.y, war: true, joint: false }; }
+      continue;
     }
+    // Not alone — but nobody holds the crown against everyone at once. Count the bots already
+    // marching on this player, and those who have said they are ready to.
+    // against a giant, come with a full camp or not at all
+    if (!worthy || !ready || myPower < need * 0.2 || (giant && st.supply < st.cap * armyGoal(p, diff) * 0.8)) continue;
+    let marching = 0, pledged = 0;
+    for (const q of world.players) {
+      if (q.id === p.id || q.id === e.id || !q.alive || !q.bot) continue;
+      if (q.bot.war && q.bot.war.target === e.id) marching += power[q.id] || 0;
+      else if (q.bot.pledge === e.id) pledged += power[q.id] || 0;
+    }
+    const jointNeed = need * Math.max(0.95, aggression * 0.75); // the cautious want a bigger crowd
+    if (myPower + 0.9 * (marching + pledged) > jointNeed) {
+      if (s * 1.2 > bestScore) { bestScore = s * 1.2; best = { id: e.id, x: eh.x, y: eh.y, war: true, joint: true }; }
+    } else if (lure > pledgeLure) { pledgeLure = lure; pledge = e.id; }
+  }
+  bot.pledge = pledge;
+  if (best && best.war) {
+    bot.war = { target: best.id, joint: best.joint, phase: 'march', since: time, startPower: myPower, arrivedAt: 0 };
+    bot.pledge = -1;
   }
 
   // A gold caravan nearby is worth more than most fights: go for the cart.
@@ -398,7 +554,7 @@ function think(world, p, st, diff, king, hq) {
   if (sh.owner !== p.id && myPower >= 420 * persona.aggression) {
     const dsh = Math.hypot(sh.x - king.x, sh.y - king.y);
     const holder = world.players[sh.owner];
-    const holderPower = holder && holder.alive ? playerStats(world, holder.id).power : 0;
+    const holderPower = holder && holder.alive ? power[holder.id] || 0 : 0;
     if ((dsh < 2400 || myPower >= 700) && myPower > holderPower * 0.8) return setGoal(bot, 'capture', sh.x, sh.y, -1);
   }
 

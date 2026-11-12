@@ -94,9 +94,9 @@ export const BUILDINGS = {
 export const DIFFICULTY = {
   // Stand-in for a first-time human in balance runs: slow, cautious, spends late.
   novice: { thinkEvery: 7, aggression: 4, maxMines: 1, armyTarget: 0.45, turn: 3, micro: 0 },
-  easy: { thinkEvery: 1.6, aggression: 1.7, maxMines: 2, armyTarget: 0.6, turn: 4, micro: 0 },
-  normal: { thinkEvery: 0.9, aggression: 1.35, maxMines: 4, armyTarget: 0.85, turn: 7, micro: 0.6 },
-  hard: { thinkEvery: 0.45, aggression: 1.2, maxMines: 6, armyTarget: 1, turn: 9, micro: 1 },
+  easy: { thinkEvery: 1.6, aggression: 1.7, maxMines: 3, armyTarget: 0.6, turn: 4, micro: 0 },
+  normal: { thinkEvery: 0.9, aggression: 1.35, maxMines: 6, armyTarget: 0.85, turn: 7, micro: 0.6 },
+  hard: { thinkEvery: 0.45, aggression: 1.2, maxMines: 9, armyTarget: 1, turn: 9, micro: 1 },
 };
 
 export const BOT_NAMES = ['Vos', 'Raaf', 'Otter', 'Wezel', 'Havik', 'Das', 'Lynx', 'Uil'];
