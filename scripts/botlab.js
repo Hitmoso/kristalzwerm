@@ -34,7 +34,7 @@ function fortify(world, me) {
   if (me.score < 2000 + 4000 * grow) me.score = 2000 + 4000 * grow;
 }
 
-const tot = { sieges: 0, falls: 0, first: [], botElim: 0, deaths: 0, goals: {}, onFort: 0, samples: 0, joint: 0, fortLost: 0, fortBuildings: 0, botLost: 0, waves: 0, power: 0, peak: 0, late: 0, lateN: 0 };
+const tot = { sieges: 0, falls: 0, first: [], botElim: 0, deaths: 0, goals: {}, onFort: 0, samples: 0, joint: 0, fortLost: 0, fortBuildings: 0, botLost: 0, waves: 0, hitByFort: 0, hitByBot: 0, power: 0, peak: 0, late: 0, lateN: 0 };
 for (let seed = 1; seed <= seeds; seed++) {
   const world = createWorld({ seed });
   const me = withFort ? addPlayer(world, { name: 'Fort' }) : null;
@@ -67,6 +67,11 @@ for (let seed = 1; seed <= seeds; seed++) {
         }
       }
     }
+    // who is hurting the bots at the castle: the defender, or each other?
+    if (hq && i % 3 === 0) for (const u of world.units) {
+      if (u.owner === me.id || u.owner < 0 || u.hitAt !== world.time || Math.hypot(u.x - hq.x, u.y - hq.y) > 700) continue;
+      if (u.hitBy === me.id) tot.hitByFort++; else if (u.hitBy >= 0) tot.hitByBot++;
+    }
     if (me && me.hqHitAt === world.time) {
       if (world.time - lastHit > 30) { tot.sieges++; if (first === null) first = world.time; }
       lastHit = world.time;
@@ -97,6 +102,7 @@ if (withFort) {
   console.log(`aanvallen op het kasteel per potje: ${per(tot.sieges)} (eerste op minuut: ${tot.first.join(', ')}), kasteel gevallen per potje: ${per(tot.falls)}`);
   console.log(`aanvalsgolven bij het kasteel per potje: ${per(tot.waves)}`);
   console.log(`verliezen speler per potje: ${per(tot.fortLost)} troepen, ${per(tot.fortBuildings)} gebouwen; botverliezen bij het kasteel: ${per(tot.botLost)}`);
+  console.log(`klappen op bots bij het kasteel: ${Math.round(100 * tot.hitByBot / (tot.hitByBot + tot.hitByFort || 1))}% van andere bots`);
   console.log(`bot-tijd in aanval op de speler: ${pct(tot.onFort)}, seconden met 2+ bots tegelijk per potje: ${per(tot.joint)}`);
 }
 console.log(`uitschakelingen bots per potje: ${per(tot.botElim)}, gesneuveld per potje: ${per(tot.deaths)}`);

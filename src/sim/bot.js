@@ -343,8 +343,10 @@ function think(world, p, st, diff, king, hq) {
 
   // An admin's order overrides everything below (but not the economy above).
   const ord = world.botOrder;
+  if (ord) bot.war = null;
+  // the army only marches off on its own during a siege; any other time it stays with the king
+  if (p.army !== 'follow' && !(bot.war && bot.war.phase === 'siege')) queueCommand(world, p.id, { type: 'army', mode: 'follow' });
   if (ord) {
-    bot.war = null;
     bot.pledge = -1;
     if (ord.order === 'center') return setGoal(bot, 'capture', world.shrine.x, world.shrine.y, -1);
     if (ord.order === 'home' || ord.target === p.id) return setGoal(bot, 'defend', homeX, homeY, -1);
@@ -363,8 +365,6 @@ function think(world, p, st, diff, king, hq) {
   const prevPledge = bot.pledge;
   bot.pledge = -1;
   if (bot.goal === 'attack' || bot.goal === 'siege' || bot.goal === 'defend' || bot.goal === 'retreat') bot.calmSince = time;
-  // the army only marches off on its own during a siege; any other time it stays with the king
-  if (p.army !== 'follow' && !(bot.war && bot.war.phase === 'siege')) queueCommand(world, p.id, { type: 'army', mode: 'follow' });
   // A siege that is called off (or beaten off) is followed by a breather before the next one.
   const endWar = (rest) => {
     if (bot.war && rest) bot.restUntil = time + rest * randRange(world, 0.8, 1.3);
@@ -455,13 +455,19 @@ function think(world, p, st, diff, king, hq) {
 
   let best = null, bestScore = 0, topScore = 1, pledge = -1, pledgeLure = 0;
   for (const e of world.players) if (e.id !== p.id && e.alive && e.score > topScore) topScore = e.score;
-  // A giant: an army no bot of our size takes on alone. While one walks
-  // the map, the rest of us have better things to do than besiege each other.
-  const isGiant = (e) => (power[e.id] || 0) >= 2000 && (power[e.id] || 0) > myPower * 1.4;
-  let giantId = -1;
+  // A giant: the strongest army on the map, when it dwarfs the average of everyone else.
+  // One and the same for every bot, so that they all look the same way. While one
+  // walks the map, the rest of us have better things to do than besiege each other.
+  let giantId = -1, others = 0, sum = 0;
   for (const e of world.players) {
-    if (e.id === p.id || !e.alive || !hqOf[e.id] || !isGiant(e)) continue;
-    if (giantId < 0 || power[e.id] > power[giantId]) giantId = e.id;
+    if (!e.alive || !hqOf[e.id]) continue;
+    others++;
+    sum += power[e.id] || 0;
+    if (giantId < 0 || (power[e.id] || 0) > (power[giantId] || 0)) giantId = e.id;
+  }
+  if (giantId >= 0) {
+    const g = power[giantId] || 0;
+    if (giantId === p.id || others < 3 || g < 2000 || g < 1.4 * (sum - g) / (others - 1)) giantId = -1;
   }
   bot.armsRace = giantId >= 0;
   for (const e of world.players) {
@@ -492,16 +498,16 @@ function think(world, p, st, diff, king, hq) {
         if (s > bestScore) { bestScore = s; best = { id: e.id, x: ec.x, y: ec.y }; }
       }
     }
-    // No honour in flattening someone far weaker who is not even in the race — unless they started it.
-    const bullying = ePower < myPower * 0.45 && e.score < topScore * 0.8 && e.id !== bot.grudge && e.id !== p.revenge;
+    // No honour in flattening someone far weaker — unless they started it.
+    const bullying = ePower < myPower * 0.55 && e.id !== bot.grudge && e.id !== p.revenge;
     if (fresh || !settled || bullying || myPower < 420 || time < bot.restUntil) continue;
     const need = defenceOf(e, eh, ec);
     const dh = Math.hypot(eh.x - king.x, eh.y - king.y);
     const s = lure / (1 + dh / 1800);
     // Against equals a bot wants a wide margin over the whole army: no petty wars that keep
     // everyone small. Against a giant it settles for less, and for what is actually at home.
-    const giant = isGiant(e);
-    if (giantId >= 0 && !giant && e.id !== p.revenge && time - e.hqHitAt > 6) continue; // truce
+    const giant = e.id === giantId;
+    if (giantId >= 0 && !giant && e.id !== p.revenge) continue; // truce
     const worthy = giant || ((e.id === bot.grudge || e.id === p.revenge) && ePower > myPower);
     const soloNeed = worthy ? need * aggression
       : Math.max(need, ePower * (ec ? 1 : 0.7) + 320 + (towersOf[e.id] || 0) * 130) * diff.aggression * persona.aggression;
@@ -513,7 +519,8 @@ function think(world, p, st, diff, king, hq) {
     // Not alone — but nobody holds the crown against everyone at once. Count the bots already
     // marching on this player, and those who have said they are ready to.
     // against a giant, come with a full camp or not at all
-    if (!worthy || !ready || myPower < need * 0.2 || (giant && st.supply < st.cap * armyGoal(p, diff) * 0.8)) continue;
+    // (the novice stands in for a first-time human in balance runs: it joins no alliances)
+    if (p.difficulty === 'novice' || !worthy || !ready || myPower < need * 0.2 || (giant && st.supply < st.cap * armyGoal(p, diff) * 0.8)) continue;
     let marching = 0, pledged = 0;
     for (const q of world.players) {
       if (q.id === p.id || q.id === e.id || !q.alive || !q.bot) continue;
