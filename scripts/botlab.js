@@ -34,7 +34,7 @@ function fortify(world, me) {
   if (me.score < 2000 + 4000 * grow) me.score = 2000 + 4000 * grow;
 }
 
-const tot = { sieges: 0, falls: 0, first: [], botElim: 0, deaths: 0, goals: {}, onFort: 0, samples: 0, joint: 0, fortLost: 0, fortBuildings: 0, botLost: 0, waves: 0, hitByFort: 0, hitByBot: 0, power: 0, peak: 0, late: 0, lateN: 0 };
+const tot = { sieges: 0, falls: 0, first: [], botElim: 0, deaths: 0, goals: {}, onFort: 0, samples: 0, joint: 0, fortLost: 0, fortBuildings: 0, botLost: 0, waves: 0, kings: 0, kingsArmy: 0, hitByFort: 0, hitByBot: 0, power: 0, peak: 0, late: 0, lateN: 0 };
 for (let seed = 1; seed <= seeds; seed++) {
   const world = createWorld({ seed });
   const me = withFort ? addPlayer(world, { name: 'Fort' }) : null;
@@ -59,6 +59,13 @@ for (let seed = 1; seed <= seeds; seed++) {
       if (e.type === 'eliminated') { if (me && e.player === me.id) tot.falls++; else tot.botElim++; }
       if (e.type === 'death') {
         tot.deaths++;
+        // a bot king who falls while his army still stands: the army walks home without him
+        if (e.kind === 'commander' && world.players[e.owner] && world.players[e.owner].isBot) {
+          tot.kings++;
+          let left = 0;
+          for (const u of world.units) if (u.owner === e.owner && u.kind !== 'commander' && u.hp > 0) left++;
+          if (left >= 8) tot.kingsArmy++;
+        }
         if (me && e.owner === me.id) { if (['hq', 'mine', 'barracks', 'tower', 'academy', 'forge'].includes(e.kind)) tot.fortBuildings++; else tot.fortLost++; }
         else if (hq && e.owner >= 0 && Math.hypot(e.x - hq.x, e.y - hq.y) < 900) {
           tot.botLost++;
@@ -106,5 +113,6 @@ if (withFort) {
   console.log(`bot-tijd in aanval op de speler: ${pct(tot.onFort)}, seconden met 2+ bots tegelijk per potje: ${per(tot.joint)}`);
 }
 console.log(`uitschakelingen bots per potje: ${per(tot.botElim)}, gesneuveld per potje: ${per(tot.deaths)}`);
+console.log(`botkoningen gesneuveld per potje: ${per(tot.kings)}, waarvan met nog 8+ troepen in leven: ${per(tot.kingsArmy)}`);
 console.log(`legerwaarde bots: gemiddeld ${Math.round(tot.power / tot.samples)}, in het laatste derde ${Math.round(tot.late / (tot.lateN || 1))}, piek ${Math.round(tot.peak)}`);
 console.log('tijdverdeling doelen:', Object.entries(tot.goals).map(([k, v]) => `${k} ${pct(v)}`).join(', '));

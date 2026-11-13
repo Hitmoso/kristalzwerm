@@ -74,7 +74,7 @@ function steer(world, p, bot, diff, king, dt) {
   const micro = diff.micro ?? 0.6;
   let dx = bot.tx - king.x, dy = bot.ty - king.y;
   const d = Math.hypot(dx, dy) || 0.001;
-  const stop = bot.goal === 'siege' ? 470 : bot.goal === 'attack' ? 170 : bot.goal === 'gather' ? 4 : bot.goal === 'build' ? 30 : bot.goal === 'capture' ? 60 : 45;
+  const stop = bot.goal === 'siege' ? 540 : bot.goal === 'attack' ? 230 : bot.goal === 'gather' ? 4 : bot.goal === 'build' ? 30 : bot.goal === 'capture' ? 60 : 45;
   let mx = 0, my = 0;
   if (d > stop) {
     const ease = Math.min(1, (d - stop) / 70 + 0.25); // ease in to a halt instead of stopping dead
@@ -89,25 +89,41 @@ function steer(world, p, bot, diff, king, dt) {
     if (bot.slow) { mx *= 0.4; my *= 0.4; } // waiting for stragglers
   }
 
-  // --- fighting: keep the king at a sensible distance and never stand still ---
-  let foe = null, foeD = 330;
+  // --- fighting: the king commands from behind his own line and never stands still ---
+  // Everything in this game shoots at what is nearest. A king who walks in front is what is
+  // nearest; when he falls, the army turns for home. So he lets his troops go first, hits
+  // from the edge of his reach once they are engaged, and backs off as soon as he is the
+  // one being shot at.
+  const SEE = 420;
+  let foe = null, foeD = SEE;
   for (const u of world.units) {
     if (u.owner === p.id) continue;
     const ud = Math.hypot(u.x - king.x, u.y - king.y);
     if (ud < foeD) { foeD = ud; foe = u; }
   }
-  bot.foe = foe ? { x: foe.x, y: foe.y, d: foeD } : null;
-  if (foe && micro > 0 && bot.goal !== 'retreat') {
+  bot.foe = foe && foeD < 330 ? { x: foe.x, y: foe.y, d: foeD } : null;
+  if (foe && bot.goal !== 'retreat') {
+    // how many of our own stand between him and us (closer to the enemy than the king is)?
+    let front = 0;
+    for (const u of world.units) {
+      if (u.owner !== p.id || u === king || UNITS[u.kind].heal) continue;
+      if (Math.hypot(u.x - foe.x, u.y - foe.y) < foeD - 25 && Math.hypot(u.x - king.x, u.y - king.y) < 330) front++;
+    }
     const hurt = king.hp / king.maxHp;
-    const keep = hurt < 0.5 ? 235 : 135; // wounded kings hang back and let the army work
+    const underFire = world.time - king.hitAt < 1.5;
+    let keep = front >= 3 ? 165 : 290;         // screened: strike from the edge of his reach; bare: troops first
+    if (hurt < 0.6 || underFire) keep += 70;    // being shot at, or already bleeding: further back
+    if (hurt < 0.4) keep += 60;
     const ex = (foe.x - king.x) / foeD, ey = (foe.y - king.y) / foeD;
     const radial = Math.max(-1, Math.min(1, (foeD - keep) / 55));
     bot.strafeFlip -= dt;
     if (bot.strafeFlip <= 0) { bot.strafeFlip = randRange(world, 1.2, 3.2); if (rand(world) < 0.5) bot.strafe = -bot.strafe; }
     const side = 0.5 * micro * bot.strafe;
-    const fx = ex * radial - ey * side, fy = ey * radial + ex * side;
+    // never walk closer than the plan needs; stepping back is something even a clumsy king does
+    const fx = ex * Math.min(radial, 0.6) - ey * side, fy = ey * Math.min(radial, 0.6) + ex * side;
     // blend: the closer the enemy, the more the fight decides where we go
-    const k = Math.min(1, (330 - foeD) / 150) * micro;
+    const near = Math.min(1, (SEE - foeD) / 150);
+    const k = radial < 0 ? near * Math.max(micro, 0.75) : near * micro;
     mx = mx * (1 - k) + fx * k;
     my = my * (1 - k) + fy * k;
   }
